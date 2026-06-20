@@ -1,0 +1,12 @@
+/* Admin page styles */
+#panel-admin .console-row {
+    align-items: start;
+}
+
+#panel-admin .card-panel {
+    min-width: 0;
+}
+
+#panel-admin .data-table td {
+    vertical-align: middle;
+}
