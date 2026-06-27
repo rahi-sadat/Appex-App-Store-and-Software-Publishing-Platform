@@ -2,6 +2,7 @@ vendor/
 node_modules/
 .env
 .env.*
+!.env.example
 storage/*.key
 storage/logs/*.log
 public/build/
@@ -10,4 +11,3 @@ public/hot
 .vscode/
 .idea/
 Thumbs.db
-

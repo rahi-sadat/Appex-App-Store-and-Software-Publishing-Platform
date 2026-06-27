@@ -16,6 +16,38 @@ This milestone sets up the working folders and ships the first UI screen:
 
 Open `public/login.html` in a browser to view the current UI.
 
+## Run With Laravel Artisan
+
+Install dependencies once:
+
+```powershell
+composer install
+copy .env.example .env
+php artisan key:generate
+```
+
+Start the Laravel dev server:
+
+```powershell
+php artisan serve
+```
+
+Then open `http://127.0.0.1:8000`.
+
+Or run a local development server from the project root:
+
+```powershell
+.\scripts\serve.ps1
+```
+
+Then open `http://127.0.0.1:8000`.
+
+If PowerShell blocks local scripts, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\serve.ps1
+```
+
 ## Main Build Lanes
 
 - Public store: explore, categories, app detail pages, developer profiles, trending and top-rated software.
@@ -23,4 +55,3 @@ Open `public/login.html` in a browser to view the current UI.
 - Developer console: app submission, versions, changelogs, releases, reviews, bugs, analytics, API keys.
 - Admin console: approvals, categories, tags, review moderation, featured apps, reports, audit logs.
 - REST API: public app data, downloads, reviews, bug reports, usage events, analytics.
-
