@@ -1,7 +1,32 @@
 <?php
 
+use App\Http\Controllers\Auth\AdminAuthController;
+use App\Http\Controllers\Auth\DeveloperAuthController;
+use App\Http\Controllers\Auth\LogoutController;
 use Illuminate\Support\Facades\Route;
 
-Route::view('/', 'auth.login')->name('home');
-Route::view('/login', 'auth.login')->name('login');
+Route::view('/', 'pages.home')->name('home');
+Route::redirect('/login', '/developer-login')->name('login');
+Route::view('/discover', 'pages.discover')->name('discover');
+Route::view('/about', 'pages.about')->name('about');
+Route::get('/developer-login', function () {
+    if (auth()->check() && auth()->user()->role === 'developer') {
+        return redirect()->route('developer');
+    }
 
+    return view('pages.developer-login');
+})->name('developer.login');
+Route::post('/developer-login', [DeveloperAuthController::class, 'login'])->name('developer.login.submit');
+Route::post('/developer/register', [DeveloperAuthController::class, 'register'])->name('developer.register');
+Route::view('/developer', 'pages.developer')->middleware('role:developer')->name('developer');
+Route::get('/admin-login', function () {
+    if (auth()->check() && auth()->user()->role === 'admin') {
+        return redirect()->route('admin');
+    }
+
+    return view('pages.admin-login');
+})->name('admin.login');
+Route::post('/admin-login', [AdminAuthController::class, 'login'])->name('admin.login.submit');
+Route::view('/admin', 'pages.admin')->middleware('role:admin')->name('admin');
+Route::view('/api-docs', 'pages.api')->name('api.docs');
+Route::post('/logout', LogoutController::class)->name('logout');

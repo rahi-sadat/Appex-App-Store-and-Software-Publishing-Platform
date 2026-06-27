@@ -357,7 +357,55 @@
                         <input class="form-input" id="developerPassword" type="password" placeholder="Enter developer password" autocomplete="current-password" minlength="6" required>
                     </div>
                     <button class="btn-primary" type="submit">Continue to publisher console</button>
+                    <button class="btn-secondary footer-tab-link" type="button" data-tab="developer-register">Don't have an account? Register</button>
                     <p class="access-status" id="developerLoginStatus" aria-live="polite"></p>
+                </form>
+            </div>
+        </div>
+
+        <!-- Developer Register Tab Panel -->
+        <div class="tab-panel" id="panel-developer-register">
+            <div class="view-header">
+                <span class="view-date">Publisher signup</span>
+                <h1 class="view-title">Developer Register</h1>
+            </div>
+
+            <div class="access-login-grid">
+                    <section class="access-copy" aria-label="Developer registration summary">
+                        <span class="badge primary">Create publisher account</span>
+                        <h2>Register before submitting apps to the Appex marketplace.</h2>
+                        <p>Create a secure publisher profile to submit software, manage releases, and track marketplace activity from one workspace.</p>
+                    <ul class="access-list">
+                        <li>Create a developer profile</li>
+                        <li>Use the account for app submissions</li>
+                        <li>Keep publishing separate from admin access</li>
+                    </ul>
+                </section>
+
+                <form class="access-card" id="developerRegisterForm" method="post" action="{{ url('/developer/register') }}">
+                    @csrf
+                    <div class="panel-title-row">
+                        <h2 class="panel-title">Create Developer Account</h2>
+                    </div>
+                    <div class="form-group">
+                        <label for="developerRegisterName">Full name</label>
+                        <input class="form-input" id="developerRegisterName" name="name" type="text" placeholder="Your name" autocomplete="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="developerRegisterEmail">Email</label>
+                        <input class="form-input" id="developerRegisterEmail" name="email" type="email" placeholder="publisher@example.com" autocomplete="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="developerRegisterPassword">Password</label>
+                        <input class="form-input" id="developerRegisterPassword" name="password" type="password" placeholder="Create a password" autocomplete="new-password" minlength="6" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="developerRegisterPasswordConfirmation">Confirm password</label>
+                        <input class="form-input" id="developerRegisterPasswordConfirmation" name="password_confirmation" type="password" placeholder="Repeat password" autocomplete="new-password" minlength="6" required>
+                    </div>
+                    <button class="btn-primary" type="submit">Create developer account</button>
+                    <button class="btn-secondary footer-tab-link" type="button" data-tab="developer-login">Already have an account? Sign in</button>
+                    <p class="access-status" aria-live="polite"></p>
                 </form>
             </div>
         </div>
@@ -495,13 +543,14 @@
                     </div>
                     <div class="form-group">
                         <label for="adminEmail">Admin email</label>
-                        <input class="form-input" id="adminEmail" type="email" placeholder="admin@appex.dev" autocomplete="username" required>
+                        <input class="form-input" id="adminEmail" type="email" placeholder="admin@gmail.com" autocomplete="username" required>
                     </div>
                     <div class="form-group">
                         <label for="adminPassword">Password</label>
-                        <input class="form-input" id="adminPassword" type="password" placeholder="Enter admin password" autocomplete="current-password" minlength="6" required>
+                        <input class="form-input" id="adminPassword" type="password" placeholder="admin123" autocomplete="current-password" minlength="6" required>
                     </div>
                     <button class="btn-primary" type="submit">Continue to moderation</button>
+                    <p class="access-status">Admin demo login: admin@gmail.com / admin123</p>
                     <p class="access-status" id="adminLoginStatus" aria-live="polite"></p>
                 </form>
             </div>

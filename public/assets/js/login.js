@@ -14,30 +14,41 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const pageRoutes = {
-        today: "home.html",
-        discover: "discover.html",
-        about: "about.html",
-        "developer-login": "developer-login.html",
-        developer: "developer.html",
-        "admin-login": "admin-login.html",
-        admin: "admin.html",
-        api: "api.html"
+        today: "/",
+        discover: "/discover",
+        about: "/about",
+        "developer-login": "/developer-login",
+        developer: "/developer",
+        "admin-login": "/admin-login",
+        admin: "/admin",
+        api: "/api-docs"
     };
 
     const currentPage = document.body.dataset.page || "today";
-    const developerSession = sessionStorage.getItem("appex-developer-auth") === "true";
-    const adminSession = sessionStorage.getItem("appex-admin-auth") === "true";
-    const initialRole = adminSession && currentPage.startsWith("admin")
+    const serverAuthMode = document.body.dataset.authMode === "server";
+    const serverAuthAccount = document.body.dataset.authAccount || "";
+    const serverAuthName = document.body.dataset.authName || "";
+    const serverAuthRole = document.body.dataset.authRole || "";
+    const isStaticPreview = window.location.pathname.endsWith(".html");
+    const developerSession = isStaticPreview && sessionStorage.getItem("appex-developer-auth") === "true";
+    const adminSession = isStaticPreview && sessionStorage.getItem("appex-admin-auth") === "true";
+    const serverRole = serverAuthAccount === "developer"
+        ? "developer"
+        : serverAuthAccount === "admin"
+            ? "admin"
+            : null;
+    const initialRole = serverRole
+        || (adminSession && currentPage.startsWith("admin")
         ? "admin"
         : developerSession && currentPage.startsWith("developer")
             ? "developer"
-            : "visitor";
+            : "visitor");
 
     let state = {
         theme: localStorage.getItem("appex-theme") || "light",
         currentRole: initialRole,
-        developerAuthenticated: developerSession,
-        adminAuthenticated: adminSession,
+        developerAuthenticated: developerSession || serverRole === "developer",
+        adminAuthenticated: adminSession || serverRole === "admin",
         activeTab: currentPage,
         activeAppId: null,
         heroIndex: 0,
@@ -247,12 +258,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // Apply theme on load
     document.documentElement.dataset.theme = state.theme;
 
-    if (currentPage === "developer" && !state.developerAuthenticated) {
+    if (!serverAuthMode && currentPage === "developer" && !state.developerAuthenticated) {
         window.location.replace(pageRoutes["developer-login"]);
         return;
     }
 
-    if (currentPage === "admin" && !state.adminAuthenticated) {
+    if (!serverAuthMode && currentPage === "admin" && !state.adminAuthenticated) {
         window.location.replace(pageRoutes["admin-login"]);
         return;
     }
@@ -377,6 +388,15 @@ document.addEventListener("DOMContentLoaded", () => {
         admin: { name: "Admin Officer", role: "Administrator", avatar: "O", color: "linear-gradient(135deg, #ff9f0a, #ff3b30)" }
     };
 
+    if (serverAuthName && roleProfiles[initialRole]) {
+        roleProfiles[initialRole] = {
+            ...roleProfiles[initialRole],
+            name: serverAuthName,
+            role: serverAuthRole || roleProfiles[initialRole].role,
+            avatar: serverAuthName.trim().charAt(0).toUpperCase() || roleProfiles[initialRole].avatar
+        };
+    }
+
     const developerAccessNavs = document.querySelectorAll(".developer-access-nav");
     const developerNavLabels = document.querySelectorAll(".developer-nav-label");
     const adminAccessNavs = document.querySelectorAll(".admin-access-nav");
@@ -439,7 +459,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const developerLoginForm = document.getElementById("developerLoginForm");
     const developerLoginStatus = document.getElementById("developerLoginStatus");
 
-    developerLoginForm?.addEventListener("submit", (event) => {
+    if (developerLoginForm?.dataset.realAuth !== "true") developerLoginForm?.addEventListener("submit", (event) => {
         event.preventDefault();
 
         if (!developerLoginForm.reportValidity()) {
@@ -475,7 +495,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const adminLoginForm = document.getElementById("adminLoginForm");
     const adminLoginStatus = document.getElementById("adminLoginStatus");
 
-    adminLoginForm?.addEventListener("submit", (event) => {
+    if (adminLoginForm?.dataset.realAuth !== "true") adminLoginForm?.addEventListener("submit", (event) => {
         event.preventDefault();
 
         if (!adminLoginForm.reportValidity()) {
