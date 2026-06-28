@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Appex - About</title>
+    @include('components.theme-loader')
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/pages/about.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -75,12 +76,6 @@
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                         <span class="admin-nav-label">Admin Login</span>
-                    </a>
-                    <a class="nav-item" href="{{ route('api.docs') }}" data-page-link="api">
-                        <svg viewBox="0 0 24 24">
-                            <path d="M4 17l6-6-6-6M12 19h8" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        <span>REST API Docs</span>
                     </a>
                 </nav>
 

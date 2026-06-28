@@ -3,14 +3,14 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Appex - Home</title>
+    <title>Appex - REST API Docs</title>
     @include('components.theme-loader')
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
-    <link rel="stylesheet" href="{{ asset('assets/css/pages/home.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/pages/api.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body
-    data-page="today"
+    data-page="api"
     @auth
         data-auth-mode="server"
         data-auth-account="{{ auth()->user()->role }}"
@@ -39,7 +39,7 @@
             <!-- Header Controls Right -->
             <div class="header-controls">
                 <nav class="header-nav" aria-label="Main header navigation">
-                    <a class="nav-item active" href="{{ route('home') }}" data-page-link="today" aria-current="page">
+                    <a class="nav-item" href="{{ route('home') }}" data-page-link="today">
                         <svg viewBox="0 0 24 24">
                             <rect x="3" y="4" width="18" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round"/>
                             <line x1="16" y1="2" x2="16" y2="4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -98,88 +98,19 @@
         </header>
 
         <main class="main-content">
-<!-- Home Tab Panel (Microsoft Style) -->
-            <div class="tab-panel active" id="panel-today">
-                <!-- Large Featured Banner -->
-                <div class="hero-banner" id="heroBannerWidget">
-                    <!-- Loaded dynamically in JS -->
+<!-- REST API Tab Panel -->
+            <div class="tab-panel active" id="panel-api">
+                <div class="view-header">
+                    <span class="view-date">External Integration API</span>
+                    <h1 class="view-title">REST API Reference</h1>
                 </div>
 
-                <!-- Trending Apps Carousel -->
-                <div class="carousel-container">
-                    <div class="carousel-header-row">
-                        <h2 class="carousel-title">Trending Apps</h2>
-                        <a class="carousel-see-all" data-target-tab="discover">See all</a>
-                    </div>
-                    <div class="carousel-track" id="trendingCarouselTrack">
-                        <!-- Dynamic Cards loaded in JS -->
-                    </div>
-                </div>
+                <p class="api-intro">
+                    Appex provides structured JSON endpoints for download counting, review tracking, version checking, and telemetry event streaming. Explore and execute these live endpoints using the playground below.
+                </p>
 
-                <section class="home-card-section" aria-label="Most downloaded software">
-                    <div class="carousel-header-row">
-                        <h2 class="carousel-title">Most Downloaded Software</h2>
-                        <a class="carousel-see-all" data-target-tab="discover">See all</a>
-                    </div>
-                    <div class="store-poster-track" id="homePosterTrack">
-                        <!-- Large store cards loaded in JS -->
-                    </div>
-                </section>
-
-                <!-- Top Categories Grid -->
-                <h2 class="carousel-title" style="margin-bottom: 16px;">Top Categories</h2>
-                <div class="categories-grid" id="homeCategoriesGrid">
-                    <div class="category-card" data-category="Web App">
-                        <div class="category-card-icon">
-                            <svg viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-                        </div>
-                        <span class="category-card-name">Web Apps</span>
-                    </div>
-                    <div class="category-card" data-category="Mobile">
-                        <div class="category-card-icon">
-                            <svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-                        </div>
-                        <span class="category-card-name">Mobile Apps</span>
-                    </div>
-                    <div class="category-card" data-category="Desktop">
-                        <div class="category-card-icon">
-                            <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                        </div>
-                        <span class="category-card-name">Desktop</span>
-                    </div>
-                    <div class="category-card" data-category="Laravel Package">
-                        <div class="category-card-icon">
-                            <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                        </div>
-                        <span class="category-card-name">Laravel Packages</span>
-                    </div>
-                    <div class="category-card" data-category="Script & Tool">
-                        <div class="category-card-icon">
-                            <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                        </div>
-                        <span class="category-card-name">Scripts & Tools</span>
-                    </div>
-                </div>
-
-                <section class="home-card-section" aria-label="Essential software">
-                    <div class="carousel-header-row">
-                        <h2 class="carousel-title">Essential Tools</h2>
-                        <a class="carousel-see-all" data-target-tab="discover">See all</a>
-                    </div>
-                    <div class="essential-card-grid" id="homeEssentialGrid">
-                        <!-- Compact home cards loaded in JS -->
-                    </div>
-                </section>
-
-                <!-- Top Rated Tools Carousel -->
-                <div class="carousel-container">
-                    <div class="carousel-header-row">
-                        <h2 class="carousel-title">Top Rated Libraries & Tools</h2>
-                        <a class="carousel-see-all" data-target-tab="discover">See all</a>
-                    </div>
-                    <div class="carousel-track" id="topRatedCarouselTrack">
-                        <!-- Dynamic Cards loaded in JS -->
-                    </div>
+                <div id="apiEndpointsContainer">
+                    <!-- API Endpoint Cards will be injected by JS -->
                 </div>
             </div>
         </main>
