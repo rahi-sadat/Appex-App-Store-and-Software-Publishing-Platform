@@ -16,6 +16,9 @@ Route::middleware(['web', 'auth'])->prefix('developer')->name('api.developer.')-
     Route::post('/apps', [DeveloperAppController::class, 'store'])->name('apps.store');
     Route::put('/apps/{app}', [DeveloperAppController::class, 'update'])->name('apps.update');
     Route::post('/apps/{app}/submit', [DeveloperAppController::class, 'submit'])->name('apps.submit');
+    Route::post('/apps/{app}/releases', [DeveloperAppController::class, 'storeRelease'])->name('apps.releases.store');
+    Route::post('/apps/{app}/screenshots', [DeveloperAppController::class, 'storeScreenshot'])->name('apps.screenshots.store');
+    Route::post('/apps/{app}/icon', [DeveloperAppController::class, 'storeIcon'])->name('apps.icon.store');
 });
 
 Route::middleware(['web', 'auth'])->prefix('admin')->name('api.admin.')->group(function () {

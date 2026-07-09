@@ -31,6 +31,7 @@ class MarketplaceApp extends Model
         'demo_url',
         'license',
         'primary_language',
+        'icon_path',
         'trust_score',
         'is_featured',
         'submitted_at',

@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Appex - Developer Console</title>
     @include('components.theme-loader')
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
@@ -507,6 +508,11 @@
                         <label for="formAppDemo">Live Demo Link</label>
                         <input type="url" id="formAppDemo" class="form-input" placeholder="https://demo.example.com">
                     </div>
+                    <div class="form-group full-width">
+                        <label for="formAppScreenshots">Screenshots (up to 5 MB each)</label>
+                        <input type="file" id="formAppScreenshots" class="form-input" accept="image/jpeg,image/png,image/webp" multiple>
+                        <small>Select your two screenshots together. The first image will be used as the cover.</small>
+                    </div>
                     <div class="form-group">
                         <label for="formAppIconUrl">App Icon Color Theme</label>
                         <select id="formAppIconUrl" class="form-select">
@@ -516,6 +522,11 @@
                             <option value="purple">Cosmic Nebulae (Purple-Pink)</option>
                             <option value="dark">Graphite Charcoal (Dark Gray)</option>
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="formAppIcon">App Icon</label>
+                        <input type="file" id="formAppIcon" class="form-input" accept="image/jpeg,image/png,image/webp">
+                        <small>JPG, PNG, or WebP up to 2 MB. Automatically cropped to 512 × 512.</small>
                     </div>
                     <div class="form-group">
                         <label for="formAppTags">Tags (comma separated)</label>

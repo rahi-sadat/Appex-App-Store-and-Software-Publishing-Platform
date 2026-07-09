@@ -8,7 +8,12 @@ use App\Models\MarketplaceApp;
 use App\Models\Tag;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Intervention\Image\Encoders\WebpEncoder;
+use Intervention\Image\Laravel\Facades\Image;
 
 class DeveloperAppController extends Controller
 {
@@ -129,6 +134,105 @@ class DeveloperAppController extends Controller
         ]);
     }
 
+    public function storeRelease(Request $request, int $app): JsonResponse
+    {
+        $marketplaceApp = $this->ownedApp($request, $app);
+
+        $data = $request->validate([
+            'version' => [
+                'required',
+                'string',
+                'max:80',
+                Rule::unique('app_releases')->where('app_id', $marketplaceApp->id),
+            ],
+            'title' => ['nullable', 'string', 'max:255'],
+            'release_notes' => ['nullable', 'string'],
+            'install_command' => ['nullable', 'string', 'max:255'],
+            'changelog_url' => ['nullable', 'url', 'max:255'],
+        ]);
+
+        // A developer creates a draft first; publishing remains part of the review flow.
+        $release = $marketplaceApp->releases()->create($data + [
+            'source' => 'manual',
+            'status' => 'draft',
+        ]);
+
+        return response()->json([
+            'message' => 'Release draft created.',
+            'release' => $release,
+        ], 201);
+    }
+
+    public function storeScreenshot(Request $request, int $app): JsonResponse
+    {
+        $marketplaceApp = $this->ownedApp($request, $app);
+
+        $data = $request->validate([
+            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'app_release_id' => [
+                'nullable',
+                Rule::exists('app_releases', 'id')->where('app_id', $marketplaceApp->id),
+            ],
+            'caption' => ['nullable', 'string', 'max:255'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
+            'is_cover' => ['nullable', 'boolean'],
+        ]);
+
+        $path = $request->file('image')->store("apps/{$marketplaceApp->id}/screenshots", 'public');
+
+        try {
+            $screenshot = DB::transaction(function () use ($marketplaceApp, $data, $path) {
+                $isCover = (bool) ($data['is_cover'] ?? false);
+
+                if ($isCover) {
+                    $marketplaceApp->screenshots()->update(['is_cover' => false]);
+                }
+
+                $sortOrder = $data['sort_order'] ?? (($marketplaceApp->screenshots()->max('sort_order') ?? -1) + 1);
+
+                return $marketplaceApp->screenshots()->create([
+                    'app_release_id' => $data['app_release_id'] ?? null,
+                    'image_path' => $path,
+                    'caption' => $data['caption'] ?? null,
+                    'sort_order' => $sortOrder,
+                    'is_cover' => $isCover,
+                ]);
+            });
+        } catch (\Throwable $exception) {
+            // Do not leave an unused file behind when the database write fails.
+            Storage::disk('public')->delete($path);
+            throw $exception;
+        }
+
+        return response()->json([
+            'message' => 'Screenshot uploaded.',
+            'screenshot' => $screenshot,
+            'url' => Storage::disk('public')->url($path),
+        ], 201);
+    }
+
+    public function storeIcon(Request $request, int $app): JsonResponse
+    {
+        $marketplaceApp = $this->ownedApp($request, $app);
+
+        $request->validate([
+            'icon' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ]);
+
+        $path = "apps/{$marketplaceApp->id}/icon/icon.webp";
+        $icon = Image::read($request->file('icon'))
+            ->cover(512, 512)
+            ->encode(new WebpEncoder(quality: 85));
+
+        Storage::disk('public')->put($path, (string) $icon);
+        $marketplaceApp->update(['icon_path' => $path]);
+
+        return response()->json([
+            'message' => 'App icon resized to 512x512 and uploaded.',
+            'icon_url' => Storage::disk('public')->url($path),
+        ], 201);
+    }
+
     private function developer(Request $request)
     {
         $user = $request->user();
@@ -138,6 +242,13 @@ class DeveloperAppController extends Controller
         }
 
         return $user;
+    }
+
+    private function ownedApp(Request $request, int $app): MarketplaceApp
+    {
+        $user = $this->developer($request);
+
+        return MarketplaceApp::where('developer_id', $user->id)->findOrFail($app);
     }
 
     private function uniqueSlug(string $name, ?int $ignoreId = null): string

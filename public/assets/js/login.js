@@ -1500,7 +1500,7 @@ document.addEventListener("DOMContentLoaded", () => {
     closeSubmitModalBtn?.addEventListener("click", closeModal);
     cancelPublishBtn?.addEventListener("click", closeModal);
 
-    appPublishForm?.addEventListener("submit", (e) => {
+    appPublishForm?.addEventListener("submit", async (e) => {
         e.preventDefault();
 
         const name = document.getElementById("formAppName").value;
@@ -1515,10 +1515,67 @@ document.addEventListener("DOMContentLoaded", () => {
         const demo = document.getElementById("formAppDemo").value;
         const iconTheme = document.getElementById("formAppIconUrl").value;
         const tagsInput = document.getElementById("formAppTags").value;
+        const screenshotInput = document.getElementById("formAppScreenshots");
+        const iconInput = document.getElementById("formAppIcon");
         
         const tags = tagsInput ? tagsInput.split(",").map(t => t.trim().toLowerCase()) : ["appex", "tool"];
 
         const appId = name.toLowerCase().replace(/[^a-z0-9]/g, "-");
+
+        // The authenticated developer page persists submissions through the Laravel API.
+        if (document.body.dataset.page === "developer") {
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+            const request = async (url, options = {}) => {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: { "Accept": "application/json", "X-CSRF-TOKEN": csrf, ...(options.headers || {}) }
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const validation = result.errors ? Object.values(result.errors).flat().join(" ") : result.message;
+                    throw new Error(validation || "The submission could not be saved.");
+                }
+                return result;
+            };
+
+            const submitButton = appPublishForm.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            try {
+                const createdApp = await request("/api/developer/apps", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        name, tagline, description: desc,
+                        repository_url: github || null, demo_url: demo || null,
+                        license: license || null, tags: tagsInput ? tagsInput.split(",").map(tag => tag.trim()).filter(Boolean) : []
+                    })
+                });
+
+                if (iconInput?.files[0]) {
+                    const iconData = new FormData();
+                    iconData.append("icon", iconInput.files[0]);
+                    await request(`/api/developer/apps/${createdApp.id}/icon`, { method: "POST", body: iconData });
+                }
+
+                for (const [index, image] of Array.from(screenshotInput?.files || []).entries()) {
+                    const formData = new FormData();
+                    formData.append("image", image);
+                    formData.append("sort_order", index);
+                    formData.append("is_cover", index === 0 ? "1" : "0");
+                    await request(`/api/developer/apps/${createdApp.id}/screenshots`, { method: "POST", body: formData });
+                }
+
+                await request(`/api/developer/apps/${createdApp.id}/submit`, { method: "POST" });
+                showToast(`"${name}" and ${screenshotInput?.files.length || 0} screenshot(s) submitted successfully.`, "success");
+                closeModal();
+                window.setTimeout(() => window.location.reload(), 700);
+            } catch (error) {
+                showToast(error.message, "danger");
+            } finally {
+                submitButton.disabled = false;
+            }
+            return;
+        }
 
         if (state.apps.some(a => a.id === appId)) {
             showToast("An app with this name already exists.", "danger");
