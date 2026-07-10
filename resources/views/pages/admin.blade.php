@@ -3,11 +3,11 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Appex - Admin Moderation</title>
     @include('components.theme-loader')
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/pages/admin.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body
     data-page="admin"
@@ -125,6 +125,16 @@
                                 <tbody id="adminQueueTableBody">
                                     <!-- Injected by JS -->
                                 </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card-panel" style="margin-bottom:24px;">
+                        <div class="panel-title-row"><h2 class="panel-title">Approved Apps</h2><span class="badge" id="adminAppsCount">0 Approved</span></div>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead><tr><th>App</th><th>Developer</th><th>Category</th><th>Status</th><th>Updated</th><th>Manage</th></tr></thead>
+                                <tbody id="adminAppsTableBody"><tr><td colspan="6">Loading apps...</td></tr></tbody>
                             </table>
                         </div>
                     </div>
@@ -481,9 +491,44 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="adminReviewModal" role="dialog" aria-modal="true" aria-labelledby="adminReviewTitle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div><h2 class="modal-title" id="adminReviewTitle">Review app</h2><small id="adminReviewMeta"></small></div>
+                <button class="close-btn" id="closeAdminReview" type="button" aria-label="Close review">&times;</button>
+            </div>
+            <form id="adminReviewForm">
+                <input type="hidden" id="adminReviewAppId">
+                <div class="form-grid">
+                    <div class="form-group"><label for="adminEditName">App name</label><input class="form-input" id="adminEditName" required maxlength="160"></div>
+                    <div class="form-group"><label for="adminEditCategory">Category</label><input class="form-input" id="adminEditCategory" readonly></div>
+                    <div class="form-group full-width"><label for="adminEditTagline">Tagline</label><input class="form-input" id="adminEditTagline" maxlength="220"></div>
+                    <div class="form-group full-width"><label for="adminEditDescription">Full description</label><textarea class="form-textarea" id="adminEditDescription" rows="7"></textarea></div>
+                    <div class="form-group"><label for="adminEditRepository">Repository URL</label><input class="form-input" id="adminEditRepository" type="url"></div>
+                    <div class="form-group"><label for="adminEditDemo">Demo URL</label><input class="form-input" id="adminEditDemo" type="url"></div>
+                    <div class="form-group"><label for="adminEditLicense">License</label><input class="form-input" id="adminEditLicense" maxlength="80"></div>
+                    <div class="form-group"><label for="adminEditLanguage">Primary language</label><input class="form-input" id="adminEditLanguage" maxlength="80"></div>
+                    <div class="form-group"><label for="adminEditVersion">Version</label><input class="form-input" id="adminEditVersion" maxlength="80" placeholder="1.0.0"></div>
+                    <div class="form-group"><label for="adminEditSize">Download size</label><input class="form-input" id="adminEditSize" placeholder="2.5 MB"></div>
+                    <div class="form-group full-width"><label for="adminEditInstall">Installation Guide / Command</label><input class="form-input" id="adminEditInstall" maxlength="255" placeholder="composer require vendor/package"></div>
+                    <div class="form-group full-width"><label for="adminEditDownloadUrl">Direct download URL</label><input class="form-input" id="adminEditDownloadUrl" type="url" placeholder="https://example.com/releases/app.zip"><small>Use a direct file URL, not a general download webpage.</small></div>
+                    <div class="form-group full-width"><label for="adminEditTags">Tags (comma separated)</label><input class="form-input" id="adminEditTags"></div>
+                    <div class="form-group full-width"><label>Submitted screenshots</label><small id="adminScreenshotHint" style="display:block;color:var(--text-secondary);margin-bottom:8px;">Drag screenshots to change their order. The first image is the cover.</small><div id="adminReviewScreenshots" style="display:flex;gap:10px;overflow-x:auto;padding:3px;"></div></div>
+                    <div class="form-group full-width"><label for="adminRejectReason">Rejection reason</label><textarea class="form-textarea" id="adminRejectReason" maxlength="1000" placeholder="Required when rejecting. Explain what the developer needs to fix."></textarea></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn-secondary">Save changes</button>
+                    <button type="button" class="btn-secondary" id="adminRejectBtn" style="color:var(--danger)">Reject with reason</button>
+                    <button type="button" class="btn-primary" id="adminApproveBtn">Approve</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Live Alerts / Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
+    <script>window.__adminPendingApps = @json($pendingApps);</script>
     <script src="{{ asset('assets/js/login.js') }}"></script>
 </body>
 </html>

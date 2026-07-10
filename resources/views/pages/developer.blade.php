@@ -321,6 +321,7 @@
             <!-- Image Screenshots Gallery -->
             <div class="detail-section">
                 <h3 class="detail-section-title">Screenshots</h3>
+                <small id="screenshotReorderHint" style="display:none;color:var(--text-secondary);margin-bottom:10px;">Drag screenshots to change their order. The first image is the cover.</small>
                 <div class="screenshots-gallery" id="detailScreenshotsContainer">
                     <!-- Images injected by JS -->
                 </div>
@@ -469,12 +470,17 @@
                     <div class="form-group">
                         <label for="formAppCategory">Category *</label>
                         <select id="formAppCategory" class="form-select" required>
-                            <option value="Web App">Web App</option>
-                            <option value="Mobile">Mobile Application</option>
-                            <option value="Desktop">Desktop Software</option>
-                            <option value="Laravel Package">Laravel Package</option>
-                            <option value="Script & Tool">Script & Mini Tool</option>
+                            <option value="">Choose a category</option>
+                            @foreach ($categories as $category)
+                                <option value="{{ $category->slug }}">{{ $category->name }}</option>
+                            @endforeach
+                            <option value="__new__">Suggest a new category…</option>
                         </select>
+                    </div>
+                    <div class="form-group" id="newCategoryGroup" hidden>
+                        <label for="formAppNewCategory">Suggested Category Name</label>
+                        <input type="text" id="formAppNewCategory" class="form-input" maxlength="80" placeholder="e.g. Healthcare">
+                        <small>Enter a name when suggesting a category. It remains pending until an administrator approves it.</small>
                     </div>
                     <div class="form-group">
                         <label for="formAppShortDesc">Tagline / Short Desc *</label>
@@ -492,6 +498,10 @@
                         <label for="formAppLicense">License</label>
                         <input type="text" id="formAppLicense" class="form-input" placeholder="e.g. MIT, Apache-2.0" value="MIT">
                     </div>
+                    <div class="form-group">
+                        <label for="formAppLanguage">Primary Language</label>
+                        <input type="text" id="formAppLanguage" class="form-input" maxlength="80" placeholder="e.g. PHP, JavaScript">
+                    </div>
                     <div class="form-group full-width">
                         <label for="formAppDesc">Full Project Description *</label>
                         <textarea id="formAppDesc" class="form-textarea" placeholder="Provide details on features, dependencies, and requirements..." required></textarea>
@@ -499,6 +509,11 @@
                     <div class="form-group full-width">
                         <label for="formAppInstall">Installation Guide / Command</label>
                         <input type="text" id="formAppInstall" class="form-input" placeholder="e.g. composer require appex/querycraft or git clone ...">
+                    </div>
+                    <div class="form-group full-width">
+                        <label for="formAppDownloadUrl">Direct Download URL</label>
+                        <input type="url" id="formAppDownloadUrl" class="form-input" placeholder="https://example.com/releases/app.zip">
+                        <small>Use a direct file URL, not a general download webpage.</small>
                     </div>
                     <div class="form-group">
                         <label for="formAppGithub">GitHub Repository Link</label>
@@ -511,7 +526,7 @@
                     <div class="form-group full-width">
                         <label for="formAppScreenshots">Screenshots (up to 5 MB each)</label>
                         <input type="file" id="formAppScreenshots" class="form-input" accept="image/jpeg,image/png,image/webp" multiple>
-                        <small>Select your two screenshots together. The first image will be used as the cover.</small>
+                        <small>Select one or more screenshots. The first selected image will be used as the cover.</small>
                     </div>
                     <div class="form-group">
                         <label for="formAppIconUrl">App Icon Color Theme</label>

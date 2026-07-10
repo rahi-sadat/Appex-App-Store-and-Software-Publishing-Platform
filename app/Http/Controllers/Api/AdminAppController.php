@@ -5,17 +5,48 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\MarketplaceApp;
 use App\Models\ModerationAction;
+use App\Models\Tag;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class AdminAppController extends Controller
 {
+    public function index(Request $request): JsonResponse
+    {
+        $this->admin($request);
+
+        return response()->json(MarketplaceApp::where('status', 'approved')
+            ->with(['developer:id,name,email', 'category', 'tags', 'screenshots', 'latestRelease.assets'])
+            ->latest('updated_at')
+            ->paginate($request->integer('per_page', 100)));
+    }
+
+    public function activities(Request $request): JsonResponse
+    {
+        $this->admin($request);
+        $actions = ModerationAction::with('admin:id,name,email')->latest()->limit(50)->get();
+        $appNames = MarketplaceApp::withTrashed()->whereIn('id', $actions->pluck('target_id'))->pluck('name', 'id');
+
+        return response()->json($actions->map(fn (ModerationAction $action) => [
+            'id' => $action->id,
+            'time' => $action->created_at?->toIso8601String(),
+            'admin' => $action->admin?->name ?? $action->admin?->email ?? 'Administrator',
+            'action' => $action->action,
+            'target' => $appNames[$action->target_id] ?? "App #{$action->target_id}",
+            'note' => $action->note,
+        ]));
+    }
+
     public function pending(Request $request): JsonResponse
     {
         $this->admin($request);
 
-        $apps = MarketplaceApp::where('status', 'pending')
-            ->with(['developer:id,name,email', 'category', 'tags', 'latestRelease'])
+        $apps = MarketplaceApp::where(function ($query) {
+                $query->where('status', 'pending')->orWhereNotNull('pending_changes');
+            })
+            ->with(['developer:id,name,email', 'category', 'tags', 'screenshots', 'latestRelease.assets'])
             ->oldest('submitted_at')
             ->paginate($request->integer('per_page', 20));
 
@@ -26,6 +57,17 @@ class AdminAppController extends Controller
     {
         $admin = $this->admin($request);
         $marketplaceApp = MarketplaceApp::findOrFail($app);
+
+        if ($marketplaceApp->pending_changes) {
+            $changes = $marketplaceApp->pending_changes;
+            $marketplaceApp->update($changes['attributes'] ?? []);
+            if (array_key_exists('release', $changes)) {
+                $this->upsertRelease($marketplaceApp, $changes['release']);
+            }
+            if (array_key_exists('tags', $changes)) {
+                $this->syncTags($marketplaceApp, $changes['tags']);
+            }
+        }
 
         $publishedAt = $marketplaceApp->published_at;
 
@@ -38,6 +80,13 @@ class AdminAppController extends Controller
             'status' => 'approved',
             'approved_at' => now(),
             'published_at' => $publishedAt,
+            'pending_changes' => null,
+            'pending_changes_submitted_at' => null,
+        ]);
+
+        $marketplaceApp->latestRelease?->update([
+            'status' => 'published',
+            'published_at' => $marketplaceApp->latestRelease->published_at ?: now(),
         ]);
 
         $this->recordAction($admin->id, 'approved_app', $marketplaceApp, $request->input('note'));
@@ -48,24 +97,111 @@ class AdminAppController extends Controller
         ]);
     }
 
+    public function update(Request $request, int $app): JsonResponse
+    {
+        $admin = $this->admin($request);
+        $marketplaceApp = MarketplaceApp::findOrFail($app);
+        $data = $request->validate([
+            'category_id' => ['nullable', 'exists:categories,id'],
+            'name' => ['required', 'string', 'max:160'],
+            'tagline' => ['nullable', 'string', 'max:220'],
+            'description' => ['nullable', 'string'],
+            'repository_url' => ['nullable', 'url', 'max:255'],
+            'demo_url' => ['nullable', 'url', 'max:255'],
+            'license' => ['nullable', 'string', 'max:80'],
+            'primary_language' => ['nullable', 'string', 'max:80'],
+            'version' => ['nullable', 'string', 'max:80'],
+            'release_notes' => ['nullable', 'string'],
+            'install_command' => ['nullable', 'string', 'max:255'],
+            'size_bytes' => ['nullable', 'integer', 'min:0'],
+            'download_url' => ['nullable', 'url', 'max:2048'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string', 'max:40'],
+        ]);
+        $tags = $data['tags'] ?? [];
+        $version = $data['version'] ?? null;
+        $releaseNotes = $data['release_notes'] ?? null;
+        $installCommand = $data['install_command'] ?? null;
+        $sizeBytes = $data['size_bytes'] ?? null;
+        $downloadUrl = $data['download_url'] ?? null;
+        unset($data['tags'], $data['version'], $data['release_notes'], $data['install_command'], $data['size_bytes'], $data['download_url']);
+        $marketplaceApp->update($data);
+
+        $this->upsertRelease($marketplaceApp, [
+            'version' => $version,
+            'release_notes' => $releaseNotes,
+            'install_command' => $installCommand,
+            'size_bytes' => $sizeBytes,
+            'download_url' => $downloadUrl,
+        ]);
+        $tagIds = collect($tags)->map(function (string $name) {
+            $name = trim($name);
+            if ($name === '') {
+                return null;
+            }
+            return Tag::firstOrCreate(
+                ['slug' => Str::slug($name)],
+                ['name' => Str::headline($name)]
+            )->id;
+        })->filter();
+        $marketplaceApp->tags()->sync($tagIds);
+        $this->recordAction($admin->id, 'updated_app', $marketplaceApp, 'App information updated by an administrator.');
+
+        return response()->json(['message' => 'App information updated.', 'app' => $marketplaceApp->load(['developer:id,name,email', 'category', 'tags', 'screenshots', 'latestRelease.assets'])]);
+    }
+
     public function reject(Request $request, int $app): JsonResponse
     {
         $admin = $this->admin($request);
         $marketplaceApp = MarketplaceApp::findOrFail($app);
 
         $data = $request->validate([
-            'note' => ['nullable', 'string', 'max:1000'],
+            'note' => ['required', 'string', 'max:1000'],
         ]);
 
-        $marketplaceApp->update([
-            'status' => 'rejected',
-        ]);
+        $marketplaceApp->update($marketplaceApp->pending_changes ? [
+            'pending_changes' => null,
+            'pending_changes_submitted_at' => null,
+        ] : ['status' => 'rejected']);
 
         $this->recordAction($admin->id, 'rejected_app', $marketplaceApp, $data['note'] ?? null);
 
         return response()->json([
             'message' => 'App rejected.',
             'app' => $marketplaceApp,
+        ]);
+    }
+
+    public function reorderScreenshots(Request $request, int $app): JsonResponse
+    {
+        $this->admin($request);
+        $marketplaceApp = MarketplaceApp::findOrFail($app);
+        $data = $request->validate([
+            'screenshot_ids' => ['required', 'array'],
+            'screenshot_ids.*' => ['required', 'integer', 'distinct'],
+        ]);
+
+        $currentIds = $marketplaceApp->screenshots()->pluck('id')->sort()->values();
+        $submittedIds = collect($data['screenshot_ids'])->sort()->values();
+
+        if ($currentIds->all() !== $submittedIds->all()) {
+            return response()->json([
+                'message' => 'The screenshot order must include every screenshot for this app exactly once.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($marketplaceApp, $data) {
+            foreach ($data['screenshot_ids'] as $position => $screenshotId) {
+                $marketplaceApp->screenshots()->whereKey($screenshotId)->update([
+                    'sort_order' => $position,
+                    'is_cover' => $position === 0,
+                ]);
+            }
+        });
+
+        return response()->json([
+            'message' => 'Screenshot order updated.',
+            'screenshots' => $marketplaceApp->screenshots()->get(),
         ]);
     }
 
@@ -98,6 +234,20 @@ class AdminAppController extends Controller
         ]);
     }
 
+    public function destroy(Request $request, int $app): JsonResponse
+    {
+        $admin = $this->admin($request);
+        $marketplaceApp = MarketplaceApp::findOrFail($app);
+        $data = $request->validate([
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $this->recordAction($admin->id, 'deleted_app', $marketplaceApp, $data['note'] ?? 'Removed from the marketplace by an administrator.');
+        $marketplaceApp->delete();
+
+        return response()->json(['message' => 'App removed. Its record and uploaded files were retained for recovery.']);
+    }
+
     private function admin(Request $request)
     {
         $user = $request->user();
@@ -118,5 +268,55 @@ class AdminAppController extends Controller
             'target_id' => $app->id,
             'note' => $note,
         ]);
+    }
+
+    private function syncTags(MarketplaceApp $app, array $names): void
+    {
+        $ids = collect($names)->map(function ($name) {
+            $name = trim((string) $name);
+            return $name === '' ? null : Tag::firstOrCreate(
+                ['slug' => Str::slug($name)],
+                ['name' => Str::headline($name)]
+            )->id;
+        })->filter()->unique();
+
+        $app->tags()->sync($ids);
+    }
+
+    private function upsertRelease(MarketplaceApp $app, array $releaseData): void
+    {
+        $hasReleaseChange = collect($releaseData)->contains(fn ($value) => $value !== null && $value !== '');
+
+        if (! $hasReleaseChange) {
+            return;
+        }
+
+        $version = $releaseData['version'] ?? $app->latestRelease?->version ?? '1.0.0';
+        $release = $app->latestRelease ?: $app->releases()->create([
+            'version' => $version,
+            'title' => "{$app->name} {$version}",
+            'source' => 'manual',
+            'status' => 'published',
+            'published_at' => now(),
+        ]);
+
+        $release->update([
+            'version' => $version,
+            'title' => "{$app->name} {$version}",
+            'release_notes' => $releaseData['release_notes'] ?? $release->release_notes,
+            'install_command' => $releaseData['install_command'] ?? $release->install_command,
+        ]);
+
+        if (($releaseData['size_bytes'] ?? null) !== null || ($releaseData['download_url'] ?? null) !== null) {
+            $release->assets()->updateOrCreate(
+                ['type' => 'download'],
+                [
+                    'app_id' => $app->id,
+                    'name' => "{$app->name} {$version}",
+                    'size_bytes' => $releaseData['size_bytes'] ?? $release->assets()->where('type', 'download')->value('size_bytes'),
+                    'external_url' => $releaseData['download_url'] ?? $release->assets()->where('type', 'download')->value('external_url'),
+                ]
+            );
+        }
     }
 }

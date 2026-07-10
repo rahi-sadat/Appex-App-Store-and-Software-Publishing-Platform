@@ -894,6 +894,10 @@
                     <label for="formAppLicense">License</label>
                     <input type="text" id="formAppLicense" class="form-input" placeholder="e.g. MIT, Apache-2.0" value="MIT">
                 </div>
+                <div class="form-group">
+                    <label for="formAppLanguage">Primary Language</label>
+                    <input type="text" id="formAppLanguage" class="form-input" maxlength="80" placeholder="e.g. PHP, JavaScript">
+                </div>
                 <div class="form-group full-width">
                     <label for="formAppDesc">Full Project Description *</label>
                     <textarea id="formAppDesc" class="form-textarea" placeholder="Provide details on features, dependencies, and requirements..." required></textarea>
@@ -901,6 +905,11 @@
                 <div class="form-group full-width">
                     <label for="formAppInstall">Installation Guide / Command</label>
                     <input type="text" id="formAppInstall" class="form-input" placeholder="e.g. composer require appex/querycraft or git clone ...">
+                </div>
+                <div class="form-group full-width">
+                    <label for="formAppDownloadUrl">Direct Download URL</label>
+                    <input type="url" id="formAppDownloadUrl" class="form-input" placeholder="https://example.com/releases/app.zip">
+                    <small>Use a direct file URL, not a general download webpage.</small>
                 </div>
                 <div class="form-group">
                     <label for="formAppGithub">GitHub Repository Link</label>

@@ -13,6 +13,23 @@ document.addEventListener("DOMContentLoaded", () => {
         dark: "linear-gradient(135deg, #1c1c1e, #8e8e93)"
     };
 
+    const formatBytes = bytes => {
+        const value = Number(bytes || 0);
+        if (!value) return "—";
+        const units = ["B", "KB", "MB", "GB"];
+        const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+        return `${(value / (1024 ** index)).toFixed(index > 1 ? 1 : 0)} ${units[index]}`;
+    };
+
+    const parseFileSize = value => {
+        const match = String(value || "").trim().match(/^([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB)?$/i);
+        if (!match) return null;
+        const powers = { B: 0, KB: 1, MB: 2, GB: 3 };
+        return Math.round(Number(match[1]) * (1024 ** powers[(match[2] || "MB").toUpperCase()]));
+    };
+
+    const appIconUrl = app => app.iconUrl || `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="100%" height="100%" rx="96" fill="#168eea"/><text x="50%" y="58%" text-anchor="middle" font-family="Arial" font-size="220" font-weight="700" fill="white">${String(app.name || "A").charAt(0)}</text></svg>`)}`;
+
     // Keep route names in one place so static previews and Laravel pages navigate the same way.
     const pageRoutes = {
         today: "/",
@@ -275,11 +292,28 @@ document.addEventListener("DOMContentLoaded", () => {
     renderHomeView();
     renderDiscoverAppGrid();
     renderDeveloperConsole();
-    renderAdminModeration();
+    if (currentPage !== "admin") {
+        renderAdminModeration();
+    }
     renderApiDocs();
 
     if (currentPage === "developer") {
+        loadDeveloperApps();
         initDeveloperCharts();
+    }
+
+    if (currentPage === "today" || currentPage === "discover") {
+        loadPublicApps();
+    }
+
+    if (currentPage === "admin") {
+        const queueBody = document.getElementById("adminQueueTableBody");
+        const queueCount = document.getElementById("adminQueueCount");
+        if (queueBody) {
+            queueBody.innerHTML = `<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--text-secondary);">Loading pending applications…</td></tr>`;
+        }
+        if (queueCount) queueCount.textContent = "Loading reviews…";
+        loadAdminPendingApps();
     }
 
     // Start Hero Banner rotation timer
@@ -598,7 +632,7 @@ document.addEventListener("DOMContentLoaded", () => {
             "laravel-ui-kit": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=1200&q=80"
         };
 
-        const bgUrl = backdrops[app.id] || "https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=1200&q=80";
+        const bgUrl = app.screenshots?.[0]?.url || backdrops[app.id] || "https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=1200&q=80";
 
         heroContainer.innerHTML = `
             <img src="${bgUrl}" alt="${app.name} background" class="hero-banner-img">
@@ -647,9 +681,7 @@ document.addEventListener("DOMContentLoaded", () => {
             card.className = "carousel-card";
             card.innerHTML = `
                 <div class="carousel-card-top">
-                    <div class="carousel-card-icon" style="background: ${iconGradients[app.iconTheme]}; display:flex; align-items:center; justify-content:center; color:white; font-weight:800; font-size:20px;">
-                        ${app.name.charAt(0)}
-                    </div>
+                    <img class="carousel-card-icon" src="${appIconUrl(app)}" alt="${app.name} icon" style="object-fit:cover;">
                     <div class="carousel-card-meta">
                         <h3 class="carousel-card-name">${app.name}</h3>
                         <span class="carousel-card-dev">${app.developer}</span>
@@ -685,9 +717,7 @@ document.addEventListener("DOMContentLoaded", () => {
             card.className = "carousel-card";
             card.innerHTML = `
                 <div class="carousel-card-top">
-                    <div class="carousel-card-icon" style="background: ${iconGradients[app.iconTheme]}; display:flex; align-items:center; justify-content:center; color:white; font-weight:800; font-size:20px;">
-                        ${app.name.charAt(0)}
-                    </div>
+                    <img class="carousel-card-icon" src="${appIconUrl(app)}" alt="${app.name} icon" style="object-fit:cover;">
                     <div class="carousel-card-meta">
                         <h3 class="carousel-card-name">${app.name}</h3>
                         <span class="carousel-card-dev">${app.developer}</span>
@@ -720,7 +750,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const card = document.createElement("article");
                 card.className = "store-poster-card";
                 card.dataset.id = app.id;
-                card.style.background = iconGradients[app.iconTheme];
+                card.style.background = app.screenshots?.[0]?.url ? `linear-gradient(rgba(0,0,0,.2),rgba(0,0,0,.65)), url("${app.screenshots[0].url}") center/cover` : iconGradients[app.iconTheme];
                 card.innerHTML = `
                     <span class="store-poster-badge">${app.category}</span>
                     <div class="store-poster-art">${app.name.charAt(0)}</div>
@@ -753,7 +783,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 card.className = "essential-card";
                 card.dataset.id = app.id;
                 card.innerHTML = `
-                    <div class="essential-icon" style="background: ${iconGradients[app.iconTheme]};">${app.name.charAt(0)}</div>
+                    <img class="essential-icon" src="${appIconUrl(app)}" alt="${app.name} icon" style="object-fit:cover;">
                     <div class="essential-info">
                         <h3 class="essential-title">${app.name}</h3>
                         <span class="essential-meta">${app.rating > 0 ? `${app.rating.toFixed(1)} rating` : "New release"} &bull; ${app.downloads.toLocaleString()} downloads</span>
@@ -837,9 +867,7 @@ document.addEventListener("DOMContentLoaded", () => {
             card.dataset.id = app.id;
             
             card.innerHTML = `
-                <div class="app-card-icon" style="background: ${iconGradients[app.iconTheme]}; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 800; color: white;">
-                    ${app.name.charAt(0)}
-                </div>
+                <img class="app-card-icon" src="${appIconUrl(app)}" alt="${app.name} icon" style="object-fit:cover;">
                 <div class="app-card-info">
                     <h3 class="app-card-title">${app.name}</h3>
                     <span class="app-card-dev">${app.developer}</span>
@@ -911,7 +939,101 @@ document.addEventListener("DOMContentLoaded", () => {
         renderDiscoverAppGrid(initialQuery, initialCategory);
     }
 
+    async function loadPublicApps() {
+        try {
+            const response = await fetch("/api/apps?per_page=100", { headers: { "Accept": "application/json" } });
+            if (!response.ok) throw new Error("Could not load marketplace apps.");
+            const payload = await response.json();
+            state.heroIndex = 0;
+            state.apps = (payload.data || []).map(app => ({
+                id: app.slug,
+                databaseId: String(app.id),
+                name: app.pending_changes?.attributes?.name || app.name,
+                developer: app.developer?.name || "Unknown developer",
+                category: app.category?.name || "Other",
+                tagline: app.pending_changes?.attributes?.tagline ?? app.tagline ?? "",
+                description: app.pending_changes?.attributes?.description ?? app.description ?? "",
+                version: app.latest_release?.version || "—",
+                size: formatBytes(app.latest_release?.assets?.[0]?.size_bytes),
+                downloadUrl: app.latest_release?.assets?.[0]?.external_url || "",
+                license: app.license || "—",
+                primaryLanguage: app.primary_language || "",
+                iconTheme: "blue",
+                iconUrl: app.icon_path ? `/storage/${app.icon_path}` : null,
+                screenshots: (app.screenshots || []).map(item => ({
+                    id: String(item.id), url: `/storage/${item.image_path}`, caption: item.caption || ""
+                })),
+                tags: app.pending_changes?.tags || (app.tags || []).map(tag => tag.name),
+                downloads: app.downloads_count || 0,
+                rating: Number(app.average_rating || 0),
+                github: app.repository_url || "",
+                demo: app.demo_url || "",
+                installCommand: app.latest_release?.install_command || "",
+                status: app.status,
+                submissionDate: app.published_at || app.created_at,
+                reviews: [],
+                bugs: []
+            }));
+            renderHomeView();
+            const params = new URLSearchParams(window.location.search);
+            renderDiscoverAppGrid(globalSearch?.value || params.get("q") || "", params.get("category") || "all");
+        } catch (error) {
+            showToast(error.message, "danger");
+        }
+    }
+
     // RENDER DEVELOPER CONSOLE
+    async function loadDeveloperApps() {
+        try {
+            const response = await fetch("/api/developer/apps", { headers: { "Accept": "application/json" } });
+            if (!response.ok) throw new Error("Could not load your submitted apps.");
+
+            const payload = await response.json();
+            state.apps = (payload.data || []).map(app => {
+                const hasPendingChanges = Boolean(app.pending_changes);
+                const pendingAttributes = app.pending_changes?.attributes || {};
+                const pendingRelease = app.pending_changes?.release || {};
+
+                return {
+                    id: String(app.id),
+                    name: pendingAttributes.name || app.name,
+                    developer: serverAuthName,
+                    category: app.category?.name || "Pending category",
+                    categorySlug: app.category?.slug || "",
+                    tagline: pendingAttributes.tagline ?? app.tagline ?? "",
+                    description: pendingAttributes.description ?? app.description ?? "",
+                    version: pendingRelease.version ?? app.latest_release?.version ?? "—",
+                    size: pendingRelease.size_bytes !== undefined ? formatBytes(pendingRelease.size_bytes) : formatBytes(app.latest_release?.assets?.[0]?.size_bytes),
+                    downloadUrl: pendingRelease.download_url ?? app.latest_release?.assets?.[0]?.external_url ?? "",
+                    license: pendingAttributes.license ?? app.license ?? "—",
+                    primaryLanguage: pendingAttributes.primary_language ?? app.primary_language ?? "",
+                    iconTheme: "blue",
+                    iconUrl: app.icon_path ? `/storage/${app.icon_path}` : null,
+                    screenshots: (app.screenshots || []).map(item => ({
+                        id: String(item.id),
+                        url: `/storage/${item.image_path}`,
+                        caption: item.caption || ""
+                    })),
+                    tags: app.pending_changes?.tags || (app.tags || []).map(tag => tag.name),
+                    downloads: app.downloads_count || 0,
+                    rating: 0,
+                    github: pendingAttributes.repository_url ?? app.repository_url ?? "",
+                    demo: pendingAttributes.demo_url ?? app.demo_url ?? "",
+                    installCommand: pendingRelease.install_command ?? app.latest_release?.install_command ?? "",
+                    status: app.status,
+                    hasPendingChanges,
+                    statusLabel: hasPendingChanges ? "MODIFICATION PENDING" : app.status.toUpperCase(),
+                    submissionDate: app.pending_changes_submitted_at || app.submitted_at || app.created_at,
+                    reviews: [],
+                    bugs: []
+                };
+            });
+            renderDeveloperConsole();
+        } catch (error) {
+            showToast(error.message, "danger");
+        }
+    }
+
     function renderDeveloperConsole() {
         if (!document.getElementById("statDownloads")) return;
 
@@ -939,30 +1061,95 @@ document.addEventListener("DOMContentLoaded", () => {
 
         devApps.forEach(app => {
             const tr = document.createElement("tr");
-            const badgeClass = app.status;
+            const badgeClass = app.hasPendingChanges ? "pending" : app.status;
             const openBugs = app.bugs.filter(b => b.status === "open").length;
 
             tr.innerHTML = `
                 <td style="font-weight:600; display:flex; align-items:center; gap:8px;">
-                    <div style="width: 28px; height: 28px; border-radius: 6px; background: ${iconGradients[app.iconTheme]}; display:flex; align-items:center; justify-content:center; color:white; font-size:12px; font-weight:700;">
-                        ${app.name.charAt(0)}
-                    </div>
+                    ${app.iconUrl
+                        ? `<img src="${app.iconUrl}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;">`
+                        : `<div style="width: 28px; height: 28px; border-radius: 6px; background: ${iconGradients[app.iconTheme]}; display:flex; align-items:center; justify-content:center; color:white; font-size:12px;font-weight:700;">${app.name.charAt(0)}</div>`}
                     <span>${app.name}</span>
                 </td>
                 <td>${app.category}</td>
                 <td>v${app.version}</td>
                 <td>${app.downloads.toLocaleString()}</td>
-                <td><span class="status-badge ${badgeClass}">${app.status.toUpperCase()}</span></td>
+                <td><span class="status-badge ${badgeClass}">${app.statusLabel || app.status.toUpperCase()}</span></td>
                 <td>${openBugs > 0 ? `<span style="color:var(--danger); font-weight:700;">${openBugs} open</span>` : "0"}</td>
                 <td>
                     <button class="btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="window.openAppDetailsDrawer('${app.id}')">View</button>
+                    <button class="btn-secondary" data-modify-app="${app.id}" style="padding: 4px 8px; font-size:11px;">Modify</button>
                 </td>
             `;
+            tr.querySelector("[data-modify-app]")?.addEventListener("click", () => openModifyApp(app));
             tableBody.appendChild(tr);
         });
     }
 
     // RENDER ADMIN MODERATION
+    async function loadAdminPendingApps() {
+        try {
+            const [appsResponse, pendingResponse, activityResponse] = await Promise.all([
+                fetch("/api/admin/apps?per_page=100", { headers: { "Accept": "application/json" } }),
+                fetch("/api/admin/apps/pending?per_page=100", { headers: { "Accept": "application/json" } }),
+                fetch("/api/admin/activities", { headers: { "Accept": "application/json" } })
+            ]);
+            if (!appsResponse.ok) throw new Error("Could not load the admin app catalog.");
+            if (!pendingResponse.ok) throw new Error("Could not load the pending review queue.");
+            if (!activityResponse.ok) throw new Error("Could not load recent moderation activity.");
+            const appsPayload = await appsResponse.json();
+            const pendingPayload = await pendingResponse.json();
+            const activityPayload = await activityResponse.json();
+            const pendingApps = [...new Map(
+                [...(appsPayload.data || []), ...(pendingPayload.data || [])].map(app => [String(app.id), app])
+            ).values()];
+
+            state.apps = pendingApps.map(app => ({
+                id: String(app.id),
+                name: app.pending_changes?.attributes?.name || app.name,
+                developer: app.developer?.name || "Unknown developer",
+                developerEmail: app.developer?.email || "",
+                categoryId: app.category_id || null,
+                category: app.category?.name || "Pending category",
+                tagline: app.pending_changes?.attributes?.tagline ?? app.tagline ?? "",
+                description: app.pending_changes?.attributes?.description ?? app.description ?? "",
+                version: app.pending_changes?.release?.version ?? app.latest_release?.version ?? "—",
+                size: app.pending_changes?.release?.size_bytes !== undefined ? formatBytes(app.pending_changes.release.size_bytes) : formatBytes(app.latest_release?.assets?.[0]?.size_bytes),
+                license: app.pending_changes?.attributes?.license ?? app.license ?? "—",
+                downloadUrl: app.pending_changes?.release?.download_url ?? app.latest_release?.assets?.[0]?.external_url ?? "",
+                primaryLanguage: app.pending_changes?.attributes?.primary_language ?? app.primary_language ?? "",
+                iconTheme: "blue",
+                iconUrl: app.icon_path ? `/storage/${app.icon_path}` : null,
+                screenshots: (app.screenshots || []).map(item => ({
+                    id: String(item.id),
+                    url: `/storage/${item.image_path}`,
+                    caption: item.caption || ""
+                })),
+                tags: app.pending_changes?.tags || (app.tags || []).map(tag => tag.name),
+                downloads: 0,
+                rating: 0,
+                github: app.pending_changes?.attributes?.repository_url ?? app.repository_url ?? "",
+                demo: app.pending_changes?.attributes?.demo_url ?? app.demo_url ?? "",
+                installCommand: app.pending_changes?.release?.install_command ?? app.latest_release?.install_command ?? "",
+                status: app.pending_changes ? "pending" : app.status,
+                submissionDate: app.submitted_at || app.created_at,
+                updatedAt: app.updated_at || app.created_at,
+                reviews: [],
+                bugs: []
+            }));
+            state.logs = activityPayload.map(item => ({
+                time: item.time ? new Date(item.time).toLocaleString() : "—",
+                user: item.admin,
+                action: item.action.replaceAll("_", " ").replace(/\b\w/g, letter => letter.toUpperCase()),
+                target: item.note ? `${item.target} — ${item.note}` : item.target,
+                status: item.action === "rejected_app" || item.action === "deleted_app" ? "Rejected" : "Approved"
+            }));
+            renderAdminModeration();
+        } catch (error) {
+            showToast(error.message, "danger");
+        }
+    }
+
     function renderAdminModeration() {
         const queueTableBody = document.getElementById("adminQueueTableBody");
         if (!queueTableBody) return;
@@ -979,9 +1166,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 const tr = document.createElement("tr");
                 tr.innerHTML = `
                     <td style="font-weight:600; display:flex; align-items:center; gap:10px;">
-                        <div style="width:34px; height:34px; border-radius: 8px; background: ${iconGradients[app.iconTheme]}; display:flex; align-items:center; justify-content:center; color:white; font-size:14px; font-weight:800;">
-                            ${app.name.charAt(0)}
-                        </div>
+                        ${app.iconUrl
+                            ? `<img src="${app.iconUrl}" alt="" style="width:34px;height:34px;border-radius:8px;object-fit:cover;">`
+                            : `<div style="width:34px;height:34px;border-radius:8px;background:${iconGradients[app.iconTheme]};display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:800;">${app.name.charAt(0)}</div>`}
                         <div>
                             <div>${app.name}</div>
                             <small style="font-weight:400; color:var(--text-secondary); display:block; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${app.tagline}</small>
@@ -998,14 +1185,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     <td>${app.submissionDate}</td>
                     <td>
                         <div style="display:flex; gap:8px;">
-                            <button class="btn-primary" style="background-color:var(--success); font-size:11px; padding:4px 8px; border:none;" data-action="approve" data-id="${app.id}">Approve</button>
-                            <button class="btn-secondary" style="color:var(--danger); background-color:var(--danger-bg); font-size:11px; padding:4px 8px; border:none;" data-action="reject" data-id="${app.id}">Reject</button>
+                            <button class="btn-secondary" style="font-size:11px; padding:4px 8px;" data-action="review" data-id="${app.id}">View / Edit</button>
                         </div>
                     </td>
                 `;
 
-                tr.querySelector('[data-action="approve"]').addEventListener("click", () => handleAdminApproval(app.id, true));
-                tr.querySelector('[data-action="reject"]').addEventListener("click", () => handleAdminApproval(app.id, false));
+                tr.querySelector('[data-action="review"]').addEventListener("click", () => openAdminReview(app.id));
 
                 queueTableBody.appendChild(tr);
             });
@@ -1031,6 +1216,40 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
             logsTableBody.appendChild(tr);
         });
+
+        renderAdminAppManagement();
+    }
+
+    function renderAdminAppManagement() {
+        const tableBody = document.getElementById("adminAppsTableBody");
+        const count = document.getElementById("adminAppsCount");
+        if (!tableBody) return;
+        const approvedApps = state.apps.filter(app => app.status === "approved");
+        if (count) count.textContent = `${approvedApps.length} Approved`;
+        tableBody.innerHTML = approvedApps.length ? "" : `<tr><td colspan="6" style="text-align:center;padding:24px;">No approved apps found.</td></tr>`;
+
+        approvedApps.forEach(app => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td><strong>${app.name}</strong><small style="display:block;color:var(--text-secondary);">${app.tagline}</small></td>
+                <td>${app.developer}</td><td>${app.category}</td>
+                <td><span class="status-badge ${app.status}">${app.status.toUpperCase()}</span></td>
+                <td>${app.updatedAt ? new Date(app.updatedAt).toLocaleString() : "—"}</td>
+                <td><div style="display:flex;gap:8px;"><button class="btn-secondary" data-manage-edit="${app.id}" style="padding:4px 8px;font-size:11px;">View / Edit</button><button class="btn-secondary" data-manage-delete="${app.id}" style="padding:4px 8px;font-size:11px;color:var(--danger);">Delete</button></div></td>`;
+            row.querySelector("[data-manage-edit]").addEventListener("click", () => openAdminReview(app.id));
+            row.querySelector("[data-manage-delete]").addEventListener("click", () => deleteAdminApp(app));
+            tableBody.appendChild(row);
+        });
+    }
+
+    async function deleteAdminApp(app) {
+        if (!window.confirm(`Remove "${app.name}" from the marketplace? The database record and uploaded files will be retained for recovery.`)) return;
+        try {
+            const result = await adminAppRequest(app.id, "", "DELETE", { note: "Removed from the All Apps management table." });
+            closeAdminReview();
+            await loadAdminPendingApps();
+            showToast(result.message, "success");
+        } catch (error) { showToast(error.message, "danger"); }
     }
 
     // RENDER REST API Reference
@@ -1115,9 +1334,150 @@ document.addEventListener("DOMContentLoaded", () => {
     // 8. Event Handler Support Functions
     // -----------------------------------------
 
-    function handleAdminApproval(appId, isApproved) {
+    function openAdminReview(appId) {
+        const app = state.apps.find(item => item.id === appId);
+        const modal = document.getElementById("adminReviewModal");
+        if (!app || !modal) return;
+        document.getElementById("adminReviewAppId").value = app.id;
+        document.getElementById("adminReviewTitle").textContent = `Review ${app.name}`;
+        document.getElementById("adminReviewMeta").textContent = `${app.developer}${app.developerEmail ? ` (${app.developerEmail})` : ""} · Version ${app.version} · Submitted ${app.submissionDate}`;
+        document.getElementById("adminEditName").value = app.name;
+        document.getElementById("adminEditCategory").value = app.category;
+        document.getElementById("adminEditTagline").value = app.tagline;
+        document.getElementById("adminEditDescription").value = app.description;
+        document.getElementById("adminEditRepository").value = app.github;
+        document.getElementById("adminEditDemo").value = app.demo;
+        document.getElementById("adminEditLicense").value = app.license === "—" ? "" : app.license;
+        document.getElementById("adminEditLanguage").value = app.primaryLanguage;
+        document.getElementById("adminEditVersion").value = app.version === "—" ? "" : app.version;
+        document.getElementById("adminEditSize").value = app.size === "—" ? "" : app.size;
+        if (document.getElementById("adminEditInstall")) document.getElementById("adminEditInstall").value = app.installCommand || "";
+        document.getElementById("adminEditDownloadUrl").value = app.downloadUrl || "";
+        document.getElementById("adminEditTags").value = app.tags.join(", ");
+        const screenshotContainer = document.getElementById("adminReviewScreenshots");
+        screenshotContainer.innerHTML = app.screenshots.length
+            ? app.screenshots.map((screenshot, index) => `<div class="screenshot-sortable" draggable="true" data-screenshot-id="${screenshot.id}" title="Drag to reorder"><a href="${screenshot.url}" target="_blank" rel="noopener"><img src="${screenshot.url}" alt="Submitted app screenshot" style="width:150px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);"></a>${index === 0 ? '<small style="display:block;color:var(--accent);font-weight:700;margin-top:4px;">Cover</small>' : ''}</div>`).join("")
+            : `<small style="color:var(--text-secondary)">No screenshots submitted.</small>`;
+        document.getElementById("adminScreenshotHint").style.display = app.screenshots.length > 1 ? "block" : "none";
+        if (app.screenshots.length > 1) enableAdminScreenshotSorting(screenshotContainer, app);
+        document.getElementById("adminRejectReason").value = "";
+        document.getElementById("adminApproveBtn").style.display = app.status === "pending" ? "inline-flex" : "none";
+        document.getElementById("adminRejectBtn").style.display = app.status === "pending" ? "inline-flex" : "none";
+        document.getElementById("adminRejectReason").closest(".form-group").style.display = app.status === "pending" ? "block" : "none";
+        modal.style.display = "flex";
+    }
+
+    function closeAdminReview() {
+        const modal = document.getElementById("adminReviewModal");
+        if (modal) modal.style.display = "none";
+    }
+
+    function enableAdminScreenshotSorting(container, app) {
+        let draggedItem = null;
+        container.querySelectorAll(".screenshot-sortable").forEach(item => {
+            item.addEventListener("dragstart", event => {
+                draggedItem = item;
+                item.classList.add("dragging");
+                event.dataTransfer.effectAllowed = "move";
+            });
+            item.addEventListener("dragend", () => {
+                item.classList.remove("dragging");
+                container.querySelectorAll(".drag-over").forEach(node => node.classList.remove("drag-over"));
+            });
+            item.addEventListener("dragover", event => {
+                event.preventDefault();
+                if (!draggedItem || draggedItem === item) return;
+                item.classList.add("drag-over");
+                const box = item.getBoundingClientRect();
+                container.insertBefore(draggedItem, event.clientX < box.left + box.width / 2 ? item : item.nextSibling);
+            });
+            item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
+            item.addEventListener("drop", async event => {
+                event.preventDefault();
+                item.classList.remove("drag-over");
+                const ids = Array.from(container.querySelectorAll("[data-screenshot-id]")).map(node => node.dataset.screenshotId);
+                const oldIds = app.screenshots.map(screenshot => screenshot.id);
+                if (ids.join(",") === oldIds.join(",")) return;
+                try {
+                    const result = await adminAppRequest(app.id, "screenshots/reorder", "PUT", { screenshot_ids: ids.map(Number) });
+                    app.screenshots = ids.map(id => app.screenshots.find(screenshot => screenshot.id === id));
+                    openAdminReview(app.id);
+                    showToast(result.message, "success");
+                } catch (error) {
+                    openAdminReview(app.id);
+                    showToast(error.message, "danger");
+                }
+            });
+        });
+    }
+
+    async function adminAppRequest(appId, action, method = "POST", payload = {}) {
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+        const response = await fetch(`/api/admin/apps/${appId}${action ? `/${action}` : ""}`, {
+            method,
+            headers: { "Accept": "application/json", "Content-Type": "application/json", "X-CSRF-TOKEN": csrf },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || "The request could not be completed.");
+        return result;
+    }
+
+    document.getElementById("closeAdminReview")?.addEventListener("click", closeAdminReview);
+    document.getElementById("adminReviewModal")?.addEventListener("click", event => {
+        if (event.target.id === "adminReviewModal") closeAdminReview();
+    });
+    document.getElementById("adminReviewForm")?.addEventListener("submit", async event => {
+        event.preventDefault();
+        const appId = document.getElementById("adminReviewAppId").value;
+        const app = state.apps.find(item => item.id === appId);
+        const payload = {
+            category_id: app?.categoryId,
+            name: document.getElementById("adminEditName").value.trim(),
+            tagline: document.getElementById("adminEditTagline").value.trim() || null,
+            description: document.getElementById("adminEditDescription").value.trim() || null,
+            repository_url: document.getElementById("adminEditRepository").value.trim() || null,
+            demo_url: document.getElementById("adminEditDemo").value.trim() || null,
+            license: document.getElementById("adminEditLicense").value.trim() || null,
+            primary_language: document.getElementById("adminEditLanguage").value.trim() || null,
+            version: document.getElementById("adminEditVersion").value.trim() || null,
+            install_command: document.getElementById("adminEditInstall")?.value.trim() || null,
+            size_bytes: parseFileSize(document.getElementById("adminEditSize").value),
+            download_url: document.getElementById("adminEditDownloadUrl").value.trim() || null,
+            tags: document.getElementById("adminEditTags").value.split(",").map(tag => tag.trim()).filter(Boolean)
+        };
+        try {
+            const result = await adminAppRequest(appId, "", "PUT", payload);
+            Object.assign(app, { name: payload.name, tagline: payload.tagline || "", description: payload.description || "", github: payload.repository_url || "", demo: payload.demo_url || "", license: payload.license || "—", primaryLanguage: payload.primary_language || "", version: payload.version || "—", size: formatBytes(payload.size_bytes), downloadUrl: payload.download_url || "", installCommand: payload.install_command || "", tags: payload.tags });
+            document.getElementById("adminReviewTitle").textContent = `Review ${app.name}`;
+            renderAdminModeration();
+            showToast(result.message, "success");
+        } catch (error) { showToast(error.message, "danger"); }
+    });
+    document.getElementById("adminApproveBtn")?.addEventListener("click", () => handleAdminApproval(document.getElementById("adminReviewAppId").value, true));
+    document.getElementById("adminRejectBtn")?.addEventListener("click", () => handleAdminApproval(document.getElementById("adminReviewAppId").value, false, document.getElementById("adminRejectReason").value.trim()));
+
+    async function handleAdminApproval(appId, isApproved, note = "") {
         const app = state.apps.find(a => a.id === appId);
         if (!app) return;
+
+        if (serverAuthMode && currentPage === "admin") {
+            const action = isApproved ? "approve" : "reject";
+            if (!isApproved && !note) {
+                showToast("Please enter a rejection reason before rejecting this app.", "danger");
+                document.getElementById("adminRejectReason")?.focus();
+                return;
+            }
+            try {
+                const result = await adminAppRequest(appId, action, "POST", { note });
+                closeAdminReview();
+                await loadAdminPendingApps();
+                showToast(result.message, "success");
+            } catch (error) {
+                showToast(error.message, "danger");
+            }
+            return;
+        }
 
         if (isApproved) {
             app.status = "approved";
@@ -1162,54 +1522,45 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 750);
     }
 
-    function triggerAppDownload(appId, buttonNode) {
+    async function triggerAppDownload(appId, buttonNode) {
         const app = state.apps.find(a => a.id === appId);
         if (!app) return;
 
-        if (buttonNode.classList.contains("downloading") || buttonNode.textContent === "OPEN") {
-            showToast(`"${app.name}" is already sandbox compiled. Running...`, "success");
-            return;
-        }
+        if (buttonNode.classList.contains("downloading")) return;
 
         buttonNode.classList.add("downloading");
         buttonNode.style.pointerEvents = "none";
-        
-        let progress = 0;
-        buttonNode.textContent = "0%";
-        
-        const interval = setInterval(() => {
-            progress += 25;
-            buttonNode.textContent = `${progress}%`;
-            
-            if (progress >= 100) {
-                clearInterval(interval);
-                buttonNode.textContent = "OPEN";
-                buttonNode.classList.remove("downloading");
-                buttonNode.style.pointerEvents = "auto";
-                buttonNode.style.backgroundColor = "var(--success-bg)";
-                buttonNode.style.color = "var(--success)";
+        const oldLabel = buttonNode.textContent;
+        buttonNode.textContent = "STARTING…";
 
-                app.downloads += 1;
-                
-                showToast(`Downloaded "${app.name}"!`, "success");
-                logActivity("Visitor", "Downloaded app package", `${app.name} v${app.version}`, "Success");
-                
-                // Sync elements
-                const detailsCountNode = document.getElementById("detailDownloadsCount");
-                if (detailsCountNode && state.activeAppId === appId) {
-                    detailsCountNode.textContent = `${app.downloads.toLocaleString()} downloads`;
-                }
+        try {
+            const response = await fetch(`/api/apps/${encodeURIComponent(app.id)}/download`, {
+                method: "POST",
+                headers: { "Accept": "application/json", "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.content || "" }
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.message || "The download could not be started.");
 
-                renderHomeView();
-                renderDiscoverAppGrid(globalSearch.value, "all");
-                renderDeveloperConsole();
-                renderAdminModeration();
+            app.downloads = result.downloads_count;
+            const link = document.createElement("a");
+            link.href = result.download_url;
+            link.download = result.filename || "";
+            link.target = "_blank";
+            link.rel = "noopener";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            showToast(`Starting download for "${app.name}".`, "success");
 
-                if (state.activeTab === "developer") {
-                    initDeveloperCharts();
-                }
-            }
-        }, 200);
+            const detailsCountNode = document.getElementById("detailDownloadsCount");
+            if (detailsCountNode && state.activeAppId === appId) detailsCountNode.textContent = `${app.downloads.toLocaleString()} downloads`;
+        } catch (error) {
+            showToast(error.message, "danger");
+        } finally {
+            buttonNode.textContent = oldLabel;
+            buttonNode.classList.remove("downloading");
+            buttonNode.style.pointerEvents = "auto";
+        }
     }
 
     // -----------------------------------------
@@ -1230,14 +1581,10 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("detailAppCategory").textContent = app.category.toUpperCase();
         
         const iconNode = document.getElementById("detailAppIcon");
-        iconNode.style.background = iconGradients[app.iconTheme];
-        iconNode.textContent = app.name.charAt(0);
-        iconNode.style.display = "flex";
-        iconNode.style.alignItems = "center";
-        iconNode.style.justifyContent = "center";
-        iconNode.style.color = "white";
-        iconNode.style.fontSize = "38px";
-        iconNode.style.fontWeight = "800";
+        iconNode.src = appIconUrl(app);
+        iconNode.alt = `${app.name} icon`;
+        iconNode.style.background = "transparent";
+        iconNode.style.objectFit = "cover";
 
         document.getElementById("detailAppName").textContent = app.name;
         document.getElementById("detailAppDeveloper").textContent = `by ${app.developer}`;
@@ -1267,10 +1614,21 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("detailInstallGuide").textContent = app.installCommand;
 
         const screenNode = document.getElementById("detailScreenshotsContainer");
-        screenNode.innerHTML = `
-            <div class="screenshot-item" style="background: linear-gradient(145deg, #1e1e24, #2d2d3a); display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.4); font-size:11px; font-weight:700;">Screenshot 1</div>
-            <div class="screenshot-item" style="background: linear-gradient(145deg, #2d2d3a, #1e1e24); display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.4); font-size:11px; font-weight:700;">Screenshot 2</div>
-        `;
+        const canReorderScreenshots = currentPage === "developer" && Array.isArray(app.screenshots);
+        const reorderHint = document.getElementById("screenshotReorderHint");
+        if (reorderHint) reorderHint.style.display = canReorderScreenshots && app.screenshots.length > 1 ? "block" : "none";
+
+        if (Array.isArray(app.screenshots) && app.screenshots.length) {
+            screenNode.innerHTML = app.screenshots.map((screenshot, index) => `
+                <div class="screenshot-sortable" draggable="${canReorderScreenshots}" data-screenshot-id="${screenshot.id}" title="${canReorderScreenshots ? "Drag to reorder" : ""}">
+                    <img class="screenshot-item" src="${screenshot.url}" alt="${screenshot.caption || `Screenshot ${index + 1}`}">
+                    ${index === 0 ? '<small style="display:block;color:var(--accent);font-weight:700;margin-top:4px;">Cover</small>' : ''}
+                </div>
+            `).join("");
+            if (canReorderScreenshots) enableScreenshotSorting(screenNode, app);
+        } else {
+            screenNode.innerHTML = `<small style="color:var(--text-secondary);">No screenshots uploaded yet.</small>`;
+        }
 
         renderAppReviewsAndBugs(app);
 
@@ -1288,6 +1646,58 @@ document.addEventListener("DOMContentLoaded", () => {
         
         document.getElementById("reviewFormContainer").style.display = "none";
         document.getElementById("bugFormContainer").style.display = "none";
+    }
+
+    function enableScreenshotSorting(container, app) {
+        let draggedItem = null;
+
+        container.querySelectorAll(".screenshot-sortable").forEach(item => {
+            item.addEventListener("dragstart", event => {
+                draggedItem = item;
+                item.classList.add("dragging");
+                event.dataTransfer.effectAllowed = "move";
+            });
+            item.addEventListener("dragend", () => {
+                item.classList.remove("dragging");
+                container.querySelectorAll(".drag-over").forEach(node => node.classList.remove("drag-over"));
+            });
+            item.addEventListener("dragover", event => {
+                event.preventDefault();
+                if (!draggedItem || draggedItem === item) return;
+                item.classList.add("drag-over");
+                const box = item.getBoundingClientRect();
+                container.insertBefore(draggedItem, event.clientX < box.left + box.width / 2 ? item : item.nextSibling);
+            });
+            item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
+            item.addEventListener("drop", async event => {
+                event.preventDefault();
+                item.classList.remove("drag-over");
+                const ids = Array.from(container.querySelectorAll("[data-screenshot-id]")).map(node => node.dataset.screenshotId);
+                await saveScreenshotOrder(app, ids);
+            });
+        });
+    }
+
+    async function saveScreenshotOrder(app, screenshotIds) {
+        const previousOrder = app.screenshots.map(item => item.id);
+        if (previousOrder.join(",") === screenshotIds.join(",")) return;
+
+        try {
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+            const response = await fetch(`/api/developer/apps/${app.id}/screenshots/reorder`, {
+                method: "PUT",
+                headers: { "Accept": "application/json", "Content-Type": "application/json", "X-CSRF-TOKEN": csrf },
+                body: JSON.stringify({ screenshot_ids: screenshotIds.map(Number) })
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.message || "Could not update screenshot order.");
+            app.screenshots = screenshotIds.map(id => app.screenshots.find(item => item.id === id));
+            window.openAppDetailsDrawer(app.id);
+            showToast(result.message, "success");
+        } catch (error) {
+            window.openAppDetailsDrawer(app.id);
+            showToast(error.message, "danger");
+        }
     }
 
     function renderAppReviewsAndBugs(app) {
@@ -1486,15 +1896,49 @@ document.addEventListener("DOMContentLoaded", () => {
     const closeSubmitModalBtn = document.getElementById("closeSubmitModalBtn");
     const cancelPublishBtn = document.getElementById("cancelPublishBtn");
     const appPublishForm = document.getElementById("appPublishForm");
+    const appCategory = document.getElementById("formAppCategory");
+    const newCategoryGroup = document.getElementById("newCategoryGroup");
+    const newCategoryInput = document.getElementById("formAppNewCategory");
+
+    appCategory?.addEventListener("change", () => {
+        const isNew = appCategory.value === "__new__";
+        if (newCategoryGroup) newCategoryGroup.hidden = !isNew;
+        if (newCategoryInput) {
+            newCategoryInput.required = isNew;
+            if (!isNew) newCategoryInput.value = "";
+        }
+    });
 
     openSubmitModalBtn?.addEventListener("click", () => {
+        delete appPublishForm.dataset.editingAppId;
         submitAppModal.style.display = "flex";
     });
+
+    function openModifyApp(app) {
+        if (!submitAppModal || !appPublishForm) return;
+        appPublishForm.dataset.editingAppId = app.id;
+        document.getElementById("formAppName").value = app.name;
+        document.getElementById("formAppShortDesc").value = app.tagline;
+        document.getElementById("formAppDesc").value = app.description;
+        document.getElementById("formAppLicense").value = app.license === "—" ? "" : app.license;
+        if (document.getElementById("formAppLanguage")) document.getElementById("formAppLanguage").value = app.primaryLanguage || "";
+        document.getElementById("formAppGithub").value = app.github;
+        document.getElementById("formAppDemo").value = app.demo;
+        document.getElementById("formAppInstall").value = app.installCommand || "";
+        document.getElementById("formAppSize").value = app.size === "—" ? "" : app.size;
+        if (document.getElementById("formAppDownloadUrl")) document.getElementById("formAppDownloadUrl").value = app.downloadUrl || "";
+        document.getElementById("formAppTags").value = app.tags.join(", ");
+        document.getElementById("formAppVersion").value = app.version === "—" ? "1.0.0" : app.version;
+        const matchingCategory = Array.from(appCategory?.options || []).find(option => option.value === app.categorySlug);
+        if (matchingCategory) appCategory.value = matchingCategory.value;
+        submitAppModal.style.display = "flex";
+    }
 
     const closeModal = () => {
         if (!submitAppModal || !appPublishForm) return;
         submitAppModal.style.display = "none";
         appPublishForm.reset();
+        delete appPublishForm.dataset.editingAppId;
     };
 
     closeSubmitModalBtn?.addEventListener("click", closeModal);
@@ -1505,12 +1949,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const name = document.getElementById("formAppName").value;
         const category = document.getElementById("formAppCategory").value;
+        const newCategory = document.getElementById("formAppNewCategory")?.value.trim();
         const tagline = document.getElementById("formAppShortDesc").value;
         const version = document.getElementById("formAppVersion").value;
         const size = document.getElementById("formAppSize").value || "2.5 MB";
         const license = document.getElementById("formAppLicense").value || "MIT";
+        const primaryLanguage = document.getElementById("formAppLanguage")?.value.trim() || "";
         const desc = document.getElementById("formAppDesc").value;
         const install = document.getElementById("formAppInstall").value || `npm install -g @${name.toLowerCase()}/cli`;
+        const downloadUrl = document.getElementById("formAppDownloadUrl")?.value.trim() || "";
         const github = document.getElementById("formAppGithub").value;
         const demo = document.getElementById("formAppDemo").value;
         const iconTheme = document.getElementById("formAppIconUrl").value;
@@ -1541,13 +1988,36 @@ document.addEventListener("DOMContentLoaded", () => {
             const submitButton = appPublishForm.querySelector('button[type="submit"]');
             submitButton.disabled = true;
             try {
+                const editingAppId = appPublishForm.dataset.editingAppId;
+                if (editingAppId) {
+                    const result = await request(`/api/developer/apps/${editingAppId}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            name, tagline, description: desc,
+                            ...(category === "__new__" ? { category_name: newCategory, category_slug: null } : { category_slug: category }),
+                            repository_url: github || null, demo_url: demo || null,
+                            license: license || null, primary_language: primaryLanguage || null,
+                            version: version || null, install_command: install || null,
+                            size_bytes: parseFileSize(size), download_url: downloadUrl || null,
+                            tags: tagsInput ? tagsInput.split(",").map(tag => tag.trim()).filter(Boolean) : []
+                        })
+                    });
+                    showToast(result.message || `"${name}" updated successfully.`, "success");
+                    closeModal();
+                    window.setTimeout(() => window.location.reload(), 700);
+                    return;
+                }
+
                 const createdApp = await request("/api/developer/apps", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         name, tagline, description: desc,
+                        ...(category === "__new__" ? { category_name: newCategory } : { category_slug: category }),
                         repository_url: github || null, demo_url: demo || null,
-                        license: license || null, tags: tagsInput ? tagsInput.split(",").map(tag => tag.trim()).filter(Boolean) : []
+                        license: license || null, primary_language: primaryLanguage || null,
+                        tags: tagsInput ? tagsInput.split(",").map(tag => tag.trim()).filter(Boolean) : []
                     })
                 });
 
@@ -1556,6 +2026,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     iconData.append("icon", iconInput.files[0]);
                     await request(`/api/developer/apps/${createdApp.id}/icon`, { method: "POST", body: iconData });
                 }
+
+                await request(`/api/developer/apps/${createdApp.id}/releases`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ version, install_command: install || null, size_bytes: parseFileSize(size), download_url: downloadUrl || null })
+                });
 
                 for (const [index, image] of Array.from(screenshotInput?.files || []).entries()) {
                     const formData = new FormData();

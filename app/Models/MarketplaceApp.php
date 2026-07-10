@@ -27,6 +27,8 @@ class MarketplaceApp extends Model
         'description',
         'source',
         'status',
+        'pending_changes',
+        'pending_changes_submitted_at',
         'repository_url',
         'demo_url',
         'license',
@@ -46,6 +48,8 @@ class MarketplaceApp extends Model
             'submitted_at' => 'datetime',
             'approved_at' => 'datetime',
             'published_at' => 'datetime',
+            'pending_changes' => 'array',
+            'pending_changes_submitted_at' => 'datetime',
         ];
     }
 
