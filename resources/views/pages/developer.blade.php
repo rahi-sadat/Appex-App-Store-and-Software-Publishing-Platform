@@ -8,7 +8,7 @@
     @include('components.theme-loader')
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/pages/developer.css') }}">
-    <script async src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body
     data-page="developer"
@@ -68,13 +68,7 @@
                             <polyline points="8 6 2 12 8 18" stroke-linecap="round" stroke-linejoin="round"/>
                             <line x1="12" y1="2" x2="12" y2="22" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span class="developer-nav-label">Publish App</span>
-                    </a>
-                    <a class="nav-item admin-access-nav" href="{{ route('admin.login') }}" data-page-link="admin-login">
-                        <svg viewBox="0 0 24 24">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        <span class="admin-nav-label">Admin Login</span>
+                        <span class="developer-nav-label">Developer Console</span>
                     </a>
                 </nav>
 
@@ -232,7 +226,6 @@
                 <div class="footer-col">
                     <h3>Platform & Moderation</h3>
                     <ul>
-                        <li><a href="{{ route('admin.login') }}" class="footer-tab-link">Admin Login</a></li>
                         <li><a href="#">Verification Queue</a></li>
                         <li><a href="#">Report Abuse & Spam</a></li>
                         <li><a href="#">Terms of Use</a></li>
@@ -344,11 +337,22 @@
                 </div>
             </div>
 
-            <!-- Reviews and ratings section -->
             <div class="detail-section">
+                <h3 class="detail-section-title">Version History</h3>
+                <div id="detailReleaseHistory" class="release-history-list"></div>
+            </div>
+
+            <!-- Sign-in placeholder for guest users -->
+            <div id="drawerAuthPrompt" style="display: none; border-top: 1px solid var(--border-color); padding: 24px 0; text-align: center;">
+                <p style="color: var(--text-secondary); margin-bottom: 14px; font-size: 14px;">Sign in to download, write reviews, and report bugs. Ratings and existing reviews remain public.</p>
+                <button class="btn-primary" id="drawerSignInBtn" style="padding: 8px 16px; font-size: 13px;" type="button">Sign In / Register</button>
+            </div>
+
+            <!-- Reviews and ratings section -->
+            <div class="detail-section" id="drawerReviewsSection">
                 <h3 class="view-title" style="font-size: 16px; margin-bottom: 12px;">
                     <span>Ratings & Reviews</span>
-                    <button class="btn-primary" id="openReviewFormBtn" style="padding: 6px 12px; font-size: 12px;" type="button">Write Review</button>
+                    <button class="btn-primary" id="openReviewFormBtn" style="display:none" type="button" hidden>Write Review</button>
                 </h3>
                 
                 <div class="rating-distribution">
@@ -365,7 +369,7 @@
                 </div>
 
                 <!-- Review Form (collapsible) -->
-                <div id="reviewFormContainer" style="display: none; background-color: var(--bg-main); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px; border: 1px solid var(--border-color);">
+                <div id="reviewFormContainer" hidden style="display: none; background-color: var(--bg-main); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px; border: 1px solid var(--border-color);">
                     <h4 style="margin-bottom: 14px; font-size: 14px; font-weight: 700;">Write a Review</h4>
                     <form id="reviewSubmitForm" style="display: flex; flex-direction: column; gap: 12px;">
                         <div style="display: flex; gap: 10px; align-items: center;">
@@ -400,10 +404,10 @@
             </div>
 
             <!-- Bug Reporting and Tracking -->
-            <div class="detail-section" style="border-top: 1px solid var(--border-color); padding-top: 24px;">
+            <div class="detail-section" id="drawerBugsSection" style="border-top: 1px solid var(--border-color); padding-top: 24px;">
                 <h3 class="view-title" style="font-size: 16px; margin-bottom: 12px;">
                     <span>Bug Reports</span>
-                    <button class="btn-primary" id="openBugFormBtn" style="padding: 6px 12px; font-size: 12px; background-color: var(--danger);" type="button">Report Bug</button>
+                    <button class="btn-primary" id="openBugFormBtn" style="display:none" type="button" hidden>Report Bug</button>
                 </h3>
 
                 <!-- Bug submission form -->
@@ -523,10 +527,14 @@
                         <label for="formAppDemo">Live Demo Link</label>
                         <input type="url" id="formAppDemo" class="form-input" placeholder="https://demo.example.com">
                     </div>
+                    <div class="form-group full-width" id="existingAppMediaGroup" hidden>
+                        <label id="appScreenshotPreviewLabel">Currently uploaded screenshots</label>
+                        <div id="existingAppScreenshots" style="display:flex;gap:10px;overflow-x:auto;padding:3px;"></div>
+                    </div>
                     <div class="form-group full-width">
                         <label for="formAppScreenshots">Screenshots (up to 5 MB each)</label>
                         <input type="file" id="formAppScreenshots" class="form-input" accept="image/jpeg,image/png,image/webp" multiple>
-                        <small>Select one or more screenshots. The first selected image will be used as the cover.</small>
+                        <small id="screenshotSelectionStatus">Select one or more screenshots. You can choose files multiple times; the first image will be the cover.</small>
                     </div>
                     <div class="form-group">
                         <label for="formAppIconUrl">App Icon Color Theme</label>
@@ -540,6 +548,7 @@
                     </div>
                     <div class="form-group">
                         <label for="formAppIcon">App Icon</label>
+                        <div id="existingAppIcon" hidden style="margin-bottom:10px;"></div>
                         <input type="file" id="formAppIcon" class="form-input" accept="image/jpeg,image/png,image/webp">
                         <small>JPG, PNG, or WebP up to 2 MB. Automatically cropped to 512 × 512.</small>
                     </div>
@@ -559,6 +568,108 @@
 
     <!-- Live Alerts / Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
+
+    @include('components.user-auth-modal')
+
+    <!-- App Management Modal (Detailed Analytics) -->
+    <div class="modal-overlay" id="manageAppModalOverlay" role="dialog" aria-modal="true" style="display: none; align-items: center; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); z-index: 1000; backdrop-filter: blur(10px); transition: all 0.3s ease;">
+        <div class="modal-content" style="max-width: 700px; width: 90%; max-height: 85vh; display: flex; flex-direction: column; padding: 32px; border-radius: 20px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.3);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-bottom: 16px;">
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <h2 class="modal-title" id="manageAppModalTitle" style="font-size: 20px; font-weight: 700; font-family: var(--font-heading);">App Analytics & Management</h2>
+                    <p style="font-size: 13px; color: var(--text-secondary); margin: 0;" id="manageAppModalSubtitle"></p>
+                </div>
+                <button class="close-btn" id="closeManageAppModalBtn" type="button" style="background: none; border: none; cursor: pointer; color: var(--text-secondary); transition: color 0.2s;">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18" stroke-linecap="round" stroke-linejoin="round"/>
+                        <line x1="6" y1="6" x2="18" y2="18" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Tab Headers -->
+            <div class="tabs-nav" style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 20px;">
+                <button type="button" class="tab-btn active" id="tabManageDownloads" style="background: none; border: none; font-size: 13px; font-weight: 700; padding: 8px 16px; cursor: pointer; color: var(--accent); border-bottom: 2.5px solid var(--accent); border-radius: 0; transition: all 0.2s;">Downloads</button>
+                <button type="button" class="tab-btn" id="tabManageBugs" style="background: none; border: none; font-size: 13px; font-weight: 700; padding: 8px 16px; cursor: pointer; color: var(--text-secondary); transition: all 0.2s;">Bug Reports</button>
+                <button type="button" class="tab-btn" id="tabManageReviews" style="background: none; border: none; font-size: 13px; font-weight: 700; padding: 8px 16px; cursor: pointer; color: var(--text-secondary); transition: all 0.2s;">Reviews</button>
+            </div>
+
+            <!-- Tab Content (Scrollable) -->
+            <div id="manageAppModalContent" style="flex: 1; overflow-y: auto; padding-right: 6px;">
+                <!-- Downloads View -->
+                <div id="viewManageDownloads" class="manage-tab-content active">
+                    <div style="display: flex; flex-direction: column; gap: 20px; align-items: center; justify-content: center; padding: 40px 20px; background: rgba(0, 113, 227, 0.03); border-radius: 12px; border: 1px dashed rgba(0, 113, 227, 0.2);">
+                        <div style="text-align: center;">
+                            <div style="font-size: 48px; font-weight: 800; color: var(--accent); margin-bottom: 4px; line-height: 1;" id="manageDownloadsCount">0</div>
+                            <p style="color: var(--text-secondary); font-size: 14px; font-weight: 600; margin: 0;">Total Installs</p>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); text-align: center;">
+                            Calculated across all versions and releases. Note that downloads count increments upon successful user initialization.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bug Reports View -->
+                <div id="viewManageBugs" class="manage-tab-content">
+                    <div id="manageBugsList" style="display: flex; flex-direction: column; gap: 12px;">
+                        <!-- Bug items injected here -->
+                    </div>
+                </div>
+
+                <!-- Reviews View -->
+                <div id="viewManageReviews" class="manage-tab-content">
+                    <div id="manageReviewsList" style="display: flex; flex-direction: column; gap: 12px;">
+                        <!-- Review items injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .manage-tab-content {
+            display: none;
+        }
+        .manage-tab-content.active {
+            display: block;
+        }
+        .analytics-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .analytics-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.05);
+        }
+        .analytics-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .analytics-card-title {
+            font-size: 15px;
+            font-weight: 700;
+            margin: 0;
+            color: var(--text-primary);
+        }
+        .analytics-card-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin: 0;
+            line-height: 1.5;
+        }
+        .tab-btn.active {
+            color: var(--accent) !important;
+            border-bottom: 2.5px solid var(--accent) !important;
+        }
+    </style>
 
     <script src="{{ asset('assets/js/login.js') }}"></script>
 </body>

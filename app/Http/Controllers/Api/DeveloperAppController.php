@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Models\Download;
 use App\Models\MarketplaceApp;
 use App\Models\Tag;
 use Illuminate\Http\JsonResponse;
@@ -23,7 +24,8 @@ class DeveloperAppController extends Controller
         $user = $this->developer($request);
 
         $allApps = MarketplaceApp::where('developer_id', $user->id)
-            ->with(['category', 'tags', 'screenshots', 'latestRelease.assets'])
+            ->with(['category', 'tags', 'screenshots', 'latestRelease.assets', 'releases.assets', 'reviews', 'bugReports'])
+            ->withCount(['downloads', 'bugReports'])
             ->orderByRaw("CASE status WHEN 'approved' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END")
             ->latest('updated_at')
             ->get()
@@ -40,7 +42,27 @@ class DeveloperAppController extends Controller
             ['path' => $request->url(), 'query' => $request->query()]
         );
 
-        return response()->json($apps);
+        $trendStart = now()->startOfDay()->subDays(6);
+        $downloadsByDate = Download::query()
+            ->whereIn('app_id', $allApps->pluck('id'))
+            ->where('downloaded_at', '>=', $trendStart)
+            ->selectRaw('DATE(downloaded_at) as download_date, COUNT(*) as download_count')
+            ->groupByRaw('DATE(downloaded_at)')
+            ->pluck('download_count', 'download_date');
+
+        $downloadTrend = collect(range(0, 6))->map(function (int $day) use ($trendStart, $downloadsByDate) {
+            $date = $trendStart->copy()->addDays($day);
+
+            return [
+                'date' => $date->toDateString(),
+                'label' => $date->format('D'),
+                'count' => (int) ($downloadsByDate[$date->toDateString()] ?? 0),
+            ];
+        })->values();
+
+        return response()->json(array_merge($apps->toArray(), [
+            'download_trend' => $downloadTrend,
+        ]));
     }
 
     public function store(Request $request): JsonResponse
@@ -461,5 +483,24 @@ class DeveloperAppController extends Controller
                 ]
             );
         }
+    }
+
+    public function updateBugStatus(Request $request, int $app, int $bug): JsonResponse
+    {
+        $marketplaceApp = $this->ownedApp($request, $app);
+        $bugReport = $marketplaceApp->bugReports()->findOrFail($bug);
+
+        $data = $request->validate([
+            'status' => ['required', 'in:open,in_progress,resolved,closed'],
+        ]);
+
+        $bugReport->update([
+            'status' => $data['status'],
+        ]);
+
+        return response()->json([
+            'message' => 'Bug report status updated.',
+            'bug' => $bugReport,
+        ]);
     }
 }
