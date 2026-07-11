@@ -28,6 +28,8 @@ class MarketplaceApp extends Model
 
     protected $table = 'apps';
 
+    protected $appends = ['average_rating'];
+
     protected $fillable = [
         'developer_id',
         'category_id',
@@ -122,5 +124,13 @@ class MarketplaceApp extends Model
     public function reports(): HasMany
     {
         return $this->hasMany(AppReport::class, 'app_id');
+    }
+
+    public function getAverageRatingAttribute(): float
+    {
+        if ($this->relationLoaded('reviews')) {
+            return (float) $this->reviews->where('status', 'published')->avg('rating') ?: 0.0;
+        }
+        return (float) $this->reviews()->where('status', 'published')->avg('rating') ?: 0.0;
     }
 }

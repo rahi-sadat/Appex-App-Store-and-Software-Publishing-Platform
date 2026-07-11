@@ -14,7 +14,7 @@
         data-auth-mode="server"
         data-auth-account="{{ auth()->user()->role }}"
         data-auth-name="{{ auth()->user()->name }}"
-        data-auth-role="{{ auth()->user()->role === 'admin' ? 'Administrator' : 'Developer Publisher' }}"
+        data-auth-role="{{ match(auth()->user()->role) { 'admin' => 'Administrator', 'developer' => 'Developer Publisher', 'user' => 'App User', default => 'Visitor' } }}"
     @endauth
 >
     <div class="app-container">
@@ -62,20 +62,24 @@
                         </svg>
                         <span>About</span>
                     </a>
-                    <a class="nav-item developer-access-nav" href="{{ route('developer.login') }}" data-page-link="developer-login">
+                    @if(auth()->guest() || auth()->user()->role === 'developer')
+                    <a class="nav-item developer-access-nav" href="{{ auth()->check() ? route('developer') : route('developer.login') }}" data-page-link="developer-login">
                         <svg viewBox="0 0 24 24">
                             <polyline points="16 18 22 12 16 6" stroke-linecap="round" stroke-linejoin="round"/>
                             <polyline points="8 6 2 12 8 18" stroke-linecap="round" stroke-linejoin="round"/>
                             <line x1="12" y1="2" x2="12" y2="22" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span class="developer-nav-label">Publish App</span>
+                        <span class="developer-nav-label">{{ auth()->check() ? 'Developer Console' : 'Publish App' }}</span>
                     </a>
-                    <a class="nav-item admin-access-nav" href="{{ route('admin.login') }}" data-page-link="admin-login">
+                    @endif
+                    @if(auth()->check() && auth()->user()->role === 'admin')
+                    <a class="nav-item admin-access-nav" href="{{ route('admin') }}" data-page-link="admin">
                         <svg viewBox="0 0 24 24">
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span class="admin-nav-label">Admin Login</span>
+                        <span class="admin-nav-label">Admin Dashboard</span>
                     </a>
+                    @endif
                 </nav>
 
                 <button class="theme-toggle-btn" id="themeToggle" type="button" aria-label="Switch theme color mode">
@@ -130,8 +134,9 @@
                 <div class="footer-col">
                     <h3>Developer Console</h3>
                     <ul>
-                        <li><a href="{{ route('developer.login') }}" class="footer-tab-link">Publish App</a></li>
-                        <li><a href="{{ route('developer.login') }}" class="footer-tab-link">Developer Login</a></li>
+                        @if(auth()->guest() || auth()->user()->role === 'developer')
+                        <li><a href="{{ auth()->check() ? route('developer') : route('developer.login') }}" class="footer-tab-link">{{ auth()->check() ? 'Developer Console' : 'Publish App' }}</a></li>
+                        @endif
                         <li><a href="{{ route('api.docs') }}" class="footer-tab-link">REST API Reference</a></li>
                         <li><a href="#">Publishing Guidelines</a></li>
                         <li><a href="#">Security & Sandbox policies</a></li>
@@ -140,7 +145,9 @@
                 <div class="footer-col">
                     <h3>Platform & Moderation</h3>
                     <ul>
-                        <li><a href="{{ route('admin.login') }}" class="footer-tab-link">Admin Login</a></li>
+                        @if(auth()->check() && auth()->user()->role === 'admin')
+                        <li><a href="{{ route('admin') }}" class="footer-tab-link">Admin Dashboard</a></li>
+                        @endif
                         <li><a href="#">Verification Queue</a></li>
                         <li><a href="#">Report Abuse & Spam</a></li>
                         <li><a href="#">Terms of Use</a></li>

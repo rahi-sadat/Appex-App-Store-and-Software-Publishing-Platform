@@ -9,13 +9,15 @@ use App\Models\MarketplaceApp;
 use App\Models\Review;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Cache;
 
 class AppController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
         $query = MarketplaceApp::where('status', 'approved')
-            ->with(['category', 'tags', 'screenshots', 'latestRelease'])
+            ->with(['developer:id,name', 'category', 'tags', 'screenshots', 'latestRelease.assets'])
             ->withCount(['downloads', 'reviews']);
 
         if ($request->filled('category')) {
@@ -60,15 +62,16 @@ class AppController extends Controller
             'category',
             'tags',
             'screenshots',
+            'latestRelease.assets',
             'releases' => function ($query) {
-                $query->latest('published_at');
+                $query->with('assets')->latest('created_at');
             },
             'assets',
             'reviews' => function ($query) {
-                $query->where('status', 'published')->latest();
+                $query->with('user')->where('status', 'published')->latest();
             },
             'bugReports' => function ($query) {
-                $query->latest();
+                $query->with('user')->latest();
             },
         ]);
 
@@ -79,14 +82,24 @@ class AppController extends Controller
 
     public function download(Request $request, string $app): JsonResponse
     {
+        $this->requireUserRole($request);
         $marketplaceApp = $this->findPublishedApp($app);
-        $marketplaceApp->load('latestRelease');
+        $marketplaceApp->load('latestRelease.assets');
 
         $releaseId = null;
 
         if ($marketplaceApp->latestRelease) {
             $releaseId = $marketplaceApp->latestRelease->id;
         }
+
+        $asset = $marketplaceApp->latestRelease?->assets->first(fn ($item) => $item->type === 'download')
+            ?? $marketplaceApp->latestRelease?->assets->first();
+
+        if (! $asset || (! $asset->file_path && ! $asset->external_url)) {
+            return response()->json(['message' => 'No downloadable file has been configured for this app yet.'], 422);
+        }
+
+        $downloadUrl = $asset->external_url ?: Storage::disk('public')->url($asset->file_path);
 
         $userId = null;
 
@@ -105,14 +118,19 @@ class AppController extends Controller
             'downloaded_at' => now(),
         ]);
 
+        Cache::forget(MarketplaceApp::PUBLIC_CATALOG_CACHE_KEY);
+
         return response()->json([
             'message' => 'Download recorded.',
             'downloads_count' => $marketplaceApp->downloads()->count(),
+            'download_url' => $downloadUrl,
+            'filename' => $asset->name,
         ]);
     }
 
     public function review(Request $request, string $app): JsonResponse
     {
+        $this->requireUserRole($request);
         $marketplaceApp = $this->findPublishedApp($app);
 
         $data = $request->validate([
@@ -130,11 +148,14 @@ class AppController extends Controller
             'status' => 'published',
         ]);
 
+        Cache::forget(MarketplaceApp::PUBLIC_CATALOG_CACHE_KEY);
+
         return response()->json($review, 201);
     }
 
     public function bugReport(Request $request, string $app): JsonResponse
     {
+        $this->requireUserRole($request);
         $marketplaceApp = $this->findPublishedApp($app);
         $marketplaceApp->load('latestRelease');
 
@@ -179,5 +200,12 @@ class AppController extends Controller
                     ->orWhere('id', $app);
             })
             ->firstOrFail();
+    }
+
+    private function requireUserRole(Request $request): void
+    {
+        if (! $request->user() || $request->user()->role !== 'user') {
+            abort(403, 'A user account is required for this action.');
+        }
     }
 }
