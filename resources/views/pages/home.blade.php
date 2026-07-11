@@ -7,7 +7,6 @@
     @include('components.theme-loader')
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/pages/home.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body
     data-page="today"
@@ -513,6 +512,7 @@
     <!-- Live Alerts / Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
+    <script>window.__marketplaceApps = @json($marketplaceApps);</script>
     <script src="{{ asset('assets/js/login.js') }}"></script>
 </body>
 </html>

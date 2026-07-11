@@ -8,7 +8,7 @@
     @include('components.theme-loader')
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/pages/developer.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body
     data-page="developer"

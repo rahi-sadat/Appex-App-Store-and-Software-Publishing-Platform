@@ -10,11 +10,21 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Cache;
 
 class MarketplaceApp extends Model
 {
     use HasFactory;
     use SoftDeletes;
+
+    public const PUBLIC_CATALOG_CACHE_KEY = 'marketplace.public.catalog.v1';
+
+    protected static function booted(): void
+    {
+        static::saved(fn () => Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY));
+        static::deleted(fn () => Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY));
+        static::restored(fn () => Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY));
+    }
 
     protected $table = 'apps';
 

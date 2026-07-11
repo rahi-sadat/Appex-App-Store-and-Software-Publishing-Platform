@@ -1,5 +1,4 @@
 <!-- Chart.js CDN for Blade Environment -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <div class="app-container">
     

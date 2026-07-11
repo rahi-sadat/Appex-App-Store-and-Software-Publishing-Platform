@@ -30,7 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const appIconUrl = app => app.iconUrl || `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="100%" height="100%" rx="96" fill="#168eea"/><text x="50%" y="58%" text-anchor="middle" font-family="Arial" font-size="220" font-weight="700" fill="white">${String(app.name || "A").charAt(0)}</text></svg>`)}`;
 
-    // Keep route names in one place so static previews and Laravel pages navigate the same way.
+    // Keep Laravel route names in one place.
     const pageRoutes = {
         today: "/",
         discover: "/discover",
@@ -42,37 +42,60 @@ document.addEventListener("DOMContentLoaded", () => {
         api: "/api-docs"
     };
 
-    // Blade pages pass the real account role here; static HTML falls back to browser sessions.
+    // Blade pages pass the authenticated account here.
     const currentPage = document.body.dataset.page || "today";
     const serverAuthMode = document.body.dataset.authMode === "server";
     const serverAuthAccount = document.body.dataset.authAccount || "";
     const serverAuthName = document.body.dataset.authName || "";
     const serverAuthRole = document.body.dataset.authRole || "";
-    const isStaticPreview = window.location.pathname.endsWith(".html");
-    const developerSession = isStaticPreview && sessionStorage.getItem("appex-developer-auth") === "true";
-    const adminSession = isStaticPreview && sessionStorage.getItem("appex-admin-auth") === "true";
     const serverRole = serverAuthAccount === "developer"
         ? "developer"
         : serverAuthAccount === "admin"
             ? "admin"
             : null;
     const initialRole = serverRole
-        || (adminSession && currentPage.startsWith("admin")
-        ? "admin"
-        : developerSession && currentPage.startsWith("developer")
-            ? "developer"
-            : "visitor");
+        || "visitor";
+
+    const mapMarketplaceApp = app => ({
+        id: app.slug,
+        databaseId: String(app.id),
+        name: app.name,
+        developer: app.developer?.name || "Unknown developer",
+        category: app.category?.name || "Other",
+        tagline: app.tagline || "",
+        description: app.description || "",
+        version: app.latest_release?.version || "—",
+        size: formatBytes(app.latest_release?.assets?.[0]?.size_bytes),
+        downloadUrl: app.latest_release?.assets?.[0]?.external_url || "",
+        license: app.license || "—",
+        primaryLanguage: app.primary_language || "",
+        iconTheme: "blue",
+        iconUrl: app.icon_path ? `/storage/${app.icon_path}` : null,
+        screenshots: (app.screenshots || []).map(item => ({
+            id: String(item.id), url: `/storage/${item.image_path}`, caption: item.caption || ""
+        })),
+        tags: (app.tags || []).map(tag => tag.name),
+        downloads: app.downloads_count || 0,
+        rating: Number(app.average_rating || 0),
+        github: app.repository_url || "",
+        demo: app.demo_url || "",
+        installCommand: app.latest_release?.install_command || "",
+        status: app.status,
+        submissionDate: app.published_at || app.created_at,
+        reviews: [],
+        bugs: []
+    });
 
     let state = {
         theme: localStorage.getItem("appex-theme") || "light",
         currentRole: initialRole,
-        developerAuthenticated: developerSession || serverRole === "developer",
-        adminAuthenticated: adminSession || serverRole === "admin",
+        developerAuthenticated: serverRole === "developer",
+        adminAuthenticated: serverRole === "admin",
         activeTab: currentPage,
         activeAppId: null,
         heroIndex: 0,
         
-        apps: [
+        apps: (window.__marketplaceApps || []).map(mapMarketplaceApp), /* Legacy mock data retained only as a comment during migration.
             {
                 id: "devflow",
                 name: "DevFlow",
@@ -249,14 +272,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 reviews: [],
                 bugs: []
             }
-        ],
+        */
 
-        logs: [
-            { time: "2026-06-20 02:15:22", user: "System", action: "API Keys rotated", target: "Developer Workspace Auth", status: "Success" },
-            { time: "2026-06-20 01:54:10", user: "Sarah Jenkins", action: "Released Version 2.4.1", target: "DevFlow", status: "Success" },
-            { time: "2026-06-19 23:12:44", user: "Admin Officer", action: "Approved app submission", target: "PyRunner", status: "Success" },
-            { time: "2026-06-19 18:40:11", user: "SecOps Solutions", action: "Submitted app package", target: "Laravel Shield", status: "Pending" }
-        ],
+        logs: [],
 
         apiEndpoints: [
             { method: "GET", path: "/api/apps", desc: "Retrieve a paginated array of approved public marketplace software.", params: [{ name: "category", type: "string", req: "optional", desc: "Filter by App Type" }, { name: "search", type: "string", req: "optional", desc: "Filter by query term" }], mockResponse: () => state.apps.filter(a => a.status === "approved") },
@@ -277,25 +295,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // Apply theme on load
     document.documentElement.dataset.theme = state.theme;
 
-    // Static previews need a client-side guard because Laravel middleware is not running there.
-    if (!serverAuthMode && currentPage === "developer" && !state.developerAuthenticated) {
-        window.location.replace(pageRoutes["developer-login"]);
-        return;
-    }
-
-    if (!serverAuthMode && currentPage === "admin" && !state.adminAuthenticated) {
-        window.location.replace(pageRoutes["admin-login"]);
-        return;
-    }
-
-    // Sync all views
-    renderHomeView();
-    renderDiscoverAppGrid();
-    renderDeveloperConsole();
-    if (currentPage !== "admin") {
-        renderAdminModeration();
-    }
-    renderApiDocs();
+    // Render only the active route.
+    if (currentPage === "today") renderHomeView();
+    if (currentPage === "discover") renderDiscoverAppGrid();
+    if (currentPage === "developer") renderDeveloperConsole();
+    if (currentPage === "admin") renderAdminModeration();
+    if (currentPage === "api") renderApiDocs();
 
     if (currentPage === "developer") {
         loadDeveloperApps();
@@ -303,7 +308,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (currentPage === "today" || currentPage === "discover") {
-        loadPublicApps();
+        if (!window.__marketplaceApps) loadPublicApps();
     }
 
     if (currentPage === "admin") {
@@ -316,14 +321,57 @@ document.addEventListener("DOMContentLoaded", () => {
         loadAdminPendingApps();
     }
 
-    // Start Hero Banner rotation timer
-    setInterval(rotateHeroBanner, 6000);
+    // A restored history entry is displayed immediately, then refreshed in place.
+    window.addEventListener("pageshow", (event) => {
+        if (!event.persisted) return;
+
+        if (currentPage === "today" || currentPage === "discover") loadPublicApps();
+        if (currentPage === "developer") loadDeveloperApps();
+        if (currentPage === "admin") loadAdminPendingApps();
+    });
+
+    // Chart.js is loaded asynchronously and must never delay the rest of the page.
+    window.addEventListener("load", initDeveloperCharts);
+
+    // Start the hero timer only where the hero exists.
+    if (currentPage === "today") setInterval(rotateHeroBanner, 6000);
 
     // -----------------------------------------
     // 3. Tab Switching Router
     // -----------------------------------------
     const navItems = document.querySelectorAll(".nav-item");
     const tabPanels = document.querySelectorAll(".tab-panel");
+
+    // Warm Laravel page responses before navigation. This keeps regular,
+    // accessible links while avoiding a cold document request after the click.
+    const prefetchedPages = new Set();
+    const prefetchPage = href => {
+        if (!href) return;
+
+        const url = new URL(href, window.location.origin);
+        if (url.origin !== window.location.origin || url.href === window.location.href || prefetchedPages.has(url.href)) return;
+
+        prefetchedPages.add(url.href);
+        const link = document.createElement("link");
+        link.rel = "prefetch";
+        link.as = "document";
+        link.href = url.href;
+        document.head.appendChild(link);
+    };
+
+    const internalLinks = [...document.querySelectorAll("a[href]")].filter(link => {
+        try {
+            return new URL(link.href, window.location.origin).origin === window.location.origin;
+        } catch {
+            return false;
+        }
+    });
+
+    internalLinks.forEach(link => {
+        link.addEventListener("pointerenter", () => prefetchPage(link.href), { once: true });
+        link.addEventListener("focus", () => prefetchPage(link.href), { once: true });
+        link.addEventListener("touchstart", () => prefetchPage(link.href), { once: true, passive: true });
+    });
 
     navItems.forEach(item => {
         if (!item.dataset.tab) return;
@@ -625,14 +673,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const heroContainer = document.getElementById("heroBannerWidget");
         if (!heroContainer) return;
 
-        // Custom imagery backdrops
-        const backdrops = {
-            devflow: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80",
-            querycraft: "https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=1200&q=80",
-            "laravel-ui-kit": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=1200&q=80"
-        };
-
-        const bgUrl = app.screenshots?.[0]?.url || backdrops[app.id] || "https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=1200&q=80";
+        // Uploaded media is preferred; the generated fallback needs no network request.
+        const bgUrl = app.screenshots?.[0]?.url || appIconUrl(app);
 
         heroContainer.innerHTML = `
             <img src="${bgUrl}" alt="${app.name} background" class="hero-banner-img">
@@ -941,7 +983,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function loadPublicApps() {
         try {
-            const response = await fetch("/api/apps?per_page=100", { headers: { "Accept": "application/json" } });
+            const response = await fetch("/api/apps?per_page=100", {
+                cache: "no-store",
+                headers: { "Accept": "application/json" }
+            });
             if (!response.ok) throw new Error("Could not load marketplace apps.");
             const payload = await response.json();
             state.heroIndex = 0;
@@ -985,7 +1030,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // RENDER DEVELOPER CONSOLE
     async function loadDeveloperApps() {
         try {
-            const response = await fetch("/api/developer/apps", { headers: { "Accept": "application/json" } });
+            const response = await fetch("/api/developer/apps", {
+                cache: "no-store",
+                headers: { "Accept": "application/json" }
+            });
             if (!response.ok) throw new Error("Could not load your submitted apps.");
 
             const payload = await response.json();
@@ -1090,9 +1138,9 @@ document.addEventListener("DOMContentLoaded", () => {
     async function loadAdminPendingApps() {
         try {
             const [appsResponse, pendingResponse, activityResponse] = await Promise.all([
-                fetch("/api/admin/apps?per_page=100", { headers: { "Accept": "application/json" } }),
-                fetch("/api/admin/apps/pending?per_page=100", { headers: { "Accept": "application/json" } }),
-                fetch("/api/admin/activities", { headers: { "Accept": "application/json" } })
+                fetch("/api/admin/apps?per_page=100", { cache: "no-store", headers: { "Accept": "application/json" } }),
+                fetch("/api/admin/apps/pending?per_page=100", { cache: "no-store", headers: { "Accept": "application/json" } }),
+                fetch("/api/admin/activities", { cache: "no-store", headers: { "Accept": "application/json" } })
             ]);
             if (!appsResponse.ok) throw new Error("Could not load the admin app catalog.");
             if (!pendingResponse.ok) throw new Error("Could not load the pending review queue.");
