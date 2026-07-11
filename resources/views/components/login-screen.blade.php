@@ -55,12 +55,6 @@
                     </svg>
                     <span class="developer-nav-label">Publish App</span>
                 </button>
-                <button class="nav-item admin-access-nav" data-tab="admin-login">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <span class="admin-nav-label">Admin Login</span>
-                </button>
             </nav>
 
             <button class="theme-toggle-btn" id="themeToggle" type="button" aria-label="Switch theme color mode">
@@ -492,43 +486,7 @@
             </div>
         </div>
 
-        <!-- Admin Login Tab Panel -->
-        <div class="tab-panel" id="panel-admin-login">
-            <div class="view-header">
-                <span class="view-date">Restricted workspace</span>
-                <h1 class="view-title">Admin Login</h1>
-            </div>
 
-            <div class="access-login-grid">
-                <section class="access-copy" aria-label="Admin access summary">
-                    <span class="badge primary">Separate access</span>
-                    <h2>Moderation is isolated from public and publisher accounts.</h2>
-                    <p>Admins sign in through a separate access flow before reviewing submissions, reports, categories, and platform activity.</p>
-                    <ul class="access-list">
-                        <li>Approve or reject submitted apps</li>
-                        <li>Review activity logs and reports</li>
-                        <li>Manage trust, categories, and featured releases</li>
-                    </ul>
-                </section>
-
-                <form class="access-card" id="adminLoginForm">
-                    <div class="panel-title-row">
-                        <h2 class="panel-title">Administrator Access</h2>
-                    </div>
-                    <div class="form-group">
-                        <label for="adminEmail">Admin email</label>
-                        <input class="form-input" id="adminEmail" type="email" placeholder="admin@gmail.com" autocomplete="username" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="adminPassword">Password</label>
-                        <input class="form-input" id="adminPassword" type="password" placeholder="admin123" autocomplete="current-password" minlength="6" required>
-                    </div>
-                    <button class="btn-primary" type="submit">Continue to moderation</button>
-                    <p class="access-status">Admin demo login: admin@gmail.com / admin123</p>
-                    <p class="access-status" id="adminLoginStatus" aria-live="polite"></p>
-                </form>
-            </div>
-        </div>
 
         <!-- Admin Moderation Tab Panel -->
         <div class="tab-panel" id="panel-admin">
@@ -633,7 +591,6 @@
             <div class="footer-col">
                 <h3>Platform & Moderation</h3>
                 <ul>
-                    <li><a href="#" class="footer-tab-link" data-tab="admin-login">Admin Login</a></li>
                     <li><a href="#">Verification Queue</a></li>
                     <li><a href="#">Report Abuse & Spam</a></li>
                     <li><a href="#">Terms of Use</a></li>

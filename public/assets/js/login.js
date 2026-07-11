@@ -52,7 +52,9 @@ document.addEventListener("DOMContentLoaded", () => {
         ? "developer"
         : serverAuthAccount === "admin"
             ? "admin"
-            : null;
+            : serverAuthAccount === "user"
+                ? "user"
+                : null;
     const initialRole = serverRole
         || "visitor";
 
@@ -80,10 +82,32 @@ document.addEventListener("DOMContentLoaded", () => {
         github: app.repository_url || "",
         demo: app.demo_url || "",
         installCommand: app.latest_release?.install_command || "",
+        releases: (app.releases || (app.latest_release ? [app.latest_release] : [])).map(release => ({
+            version: release.version || "—",
+            title: release.title || "",
+            notes: release.release_notes || "",
+            status: release.status || "draft",
+            date: release.published_at || release.created_at || null
+        })),
         status: app.status,
         submissionDate: app.published_at || app.created_at,
-        reviews: [],
-        bugs: []
+        reviews: (app.reviews || []).map(r => ({
+            id: String(r.id),
+            author: r.user?.name || r.user?.email || "User",
+            stars: parseInt(r.rating) || 5,
+            title: r.title || "",
+            text: r.body || "",
+            date: r.created_at ? new Date(r.created_at).toISOString().split('T')[0] : ""
+        })),
+        bugs: (app.bug_reports || []).map(b => ({
+            id: `BUG-${b.id}`,
+            dbId: b.id,
+            title: b.title || "",
+            desc: b.description || "",
+            severity: b.severity || "medium",
+            version: b.app_release?.version || "1.0.0",
+            status: b.status || "open"
+        }))
     });
 
     let state = {
@@ -118,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 reviews: [
                     { author: "Marc_K", stars: 5, title: "Supercharges our sprints", text: "We swapped our Trello board for DevFlow and the Git repository integration has saved us countless hours of manual status updating.", date: "2026-06-14" },
                     { author: "LaraCodes", stars: 5, title: "Frictionless and fast", text: "Extremely fast interface. The keyboard shortcuts are a nice developer-friendly touch.", date: "2026-06-15" },
-                    { author: "John_Doe", stars: 4, title: "Great, but needs Slack hooks", text: "Excellent tool overall. I hope they release a Slack or Discord webhook integration in the next version.", date: "2026-06-18" }
+                    { author: "Marketplace User", stars: 4, title: "Great, but needs Slack hooks", text: "Excellent tool overall. I hope they release a Slack or Discord webhook integration in the next version.", date: "2026-06-18" }
                 ],
                 bugs: [
                     { id: "DF-302", title: "Sidebar scroll lock on iOS viewports", desc: "When opening the activity sidebar on mobile Safari, the background document scroll is not locked.", severity: "low", version: "2.4.0", status: "resolved" },
@@ -275,6 +299,7 @@ document.addEventListener("DOMContentLoaded", () => {
         */
 
         logs: [],
+        downloadTrend: [],
 
         apiEndpoints: [
             { method: "GET", path: "/api/apps", desc: "Retrieve a paginated array of approved public marketplace software.", params: [{ name: "category", type: "string", req: "optional", desc: "Filter by App Type" }, { name: "search", type: "string", req: "optional", desc: "Filter by query term" }], mockResponse: () => state.apps.filter(a => a.status === "approved") },
@@ -396,8 +421,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (tabName === "admin" && !state.adminAuthenticated) {
-            tabName = "admin-login";
+            window.openUserAuthModal();
             showToast("Admin moderation requires admin login.", "warning");
+            return;
         }
 
         state.activeTab = tabName;
@@ -469,6 +495,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const roleProfiles = {
         visitor: { name: "Guest User", role: "Visitor", avatar: "G", color: "linear-gradient(135deg, #86868b, #48484a)" },
+        user: { name: "App User", role: "App User", avatar: "U", color: "linear-gradient(135deg, #30d158, #34c759)" },
         developer: { name: "Alex Mercer", role: "Developer Publisher", avatar: "A", color: "linear-gradient(135deg, #0071e3, #af52de)" },
         admin: { name: "Admin Officer", role: "Administrator", avatar: "O", color: "linear-gradient(135deg, #ff9f0a, #ff3b30)" }
     };
@@ -574,42 +601,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         window.setTimeout(() => {
             window.location.href = pageRoutes.developer;
-        }, 450);
-    });
-
-    const adminLoginForm = document.getElementById("adminLoginForm");
-    const adminLoginStatus = document.getElementById("adminLoginStatus");
-
-    if (adminLoginForm?.dataset.realAuth !== "true") adminLoginForm?.addEventListener("submit", (event) => {
-        event.preventDefault();
-
-        if (!adminLoginForm.reportValidity()) {
-            return;
-        }
-
-        state.adminAuthenticated = true;
-        state.currentRole = "admin";
-        sessionStorage.setItem("appex-admin-auth", "true");
-        applyProfile("admin");
-
-        adminAccessNavs.forEach(nav => {
-            nav.dataset.tab = "admin";
-            if (nav.tagName === "A") nav.href = pageRoutes.admin;
-        });
-
-        adminNavLabels.forEach(label => {
-            label.textContent = "Admin Moderation";
-        });
-
-        if (adminLoginStatus) {
-            adminLoginStatus.textContent = "Admin access verified. Opening moderation workspace...";
-        }
-
-        showToast("Admin workspace unlocked.", "success");
-        renderAdminModeration();
-
-        window.setTimeout(() => {
-            window.location.href = pageRoutes.admin;
         }, 450);
     });
 
@@ -1037,6 +1028,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!response.ok) throw new Error("Could not load your submitted apps.");
 
             const payload = await response.json();
+            state.downloadTrend = Array.isArray(payload.download_trend) ? payload.download_trend : [];
             state.apps = (payload.data || []).map(app => {
                 const hasPendingChanges = Boolean(app.pending_changes);
                 const pendingAttributes = app.pending_changes?.attributes || {};
@@ -1044,6 +1036,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 return {
                     id: String(app.id),
+                    databaseId: String(app.id),
                     name: pendingAttributes.name || app.name,
                     developer: serverAuthName,
                     category: app.category?.name || "Pending category",
@@ -1064,19 +1057,42 @@ document.addEventListener("DOMContentLoaded", () => {
                     })),
                     tags: app.pending_changes?.tags || (app.tags || []).map(tag => tag.name),
                     downloads: app.downloads_count || 0,
-                    rating: 0,
+                    rating: parseFloat(app.average_rating) || parseFloat(app.rating) || 0,
                     github: pendingAttributes.repository_url ?? app.repository_url ?? "",
                     demo: pendingAttributes.demo_url ?? app.demo_url ?? "",
                     installCommand: pendingRelease.install_command ?? app.latest_release?.install_command ?? "",
+                    releases: (app.releases || (app.latest_release ? [app.latest_release] : [])).map(release => ({
+                        version: release.version || "—",
+                        title: release.title || "",
+                        notes: release.release_notes || "",
+                        status: release.status || "draft",
+                        date: release.published_at || release.created_at || null
+                    })),
                     status: app.status,
                     hasPendingChanges,
                     statusLabel: hasPendingChanges ? "MODIFICATION PENDING" : app.status.toUpperCase(),
                     submissionDate: app.pending_changes_submitted_at || app.submitted_at || app.created_at,
-                    reviews: [],
-                    bugs: []
+                    reviews: (app.reviews || []).map(r => ({
+                        id: String(r.id),
+                        author: r.user?.name || r.user?.email || "User",
+                        stars: parseInt(r.rating) || 5,
+                        title: r.title || "",
+                        text: r.body || "",
+                        date: r.created_at ? new Date(r.created_at).toISOString().split('T')[0] : ""
+                    })),
+                    bugs: (app.bug_reports || []).map(b => ({
+                        id: `BUG-${b.id}`,
+                        dbId: b.id,
+                        title: b.title || "",
+                        desc: b.description || "",
+                        severity: b.severity || "medium",
+                        version: b.app_release?.version || "1.0.0",
+                        status: b.status || "open"
+                    }))
                 };
             });
             renderDeveloperConsole();
+            initDeveloperCharts();
         } catch (error) {
             showToast(error.message, "danger");
         }
@@ -1125,11 +1141,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 <td><span class="status-badge ${badgeClass}">${app.statusLabel || app.status.toUpperCase()}</span></td>
                 <td>${openBugs > 0 ? `<span style="color:var(--danger); font-weight:700;">${openBugs} open</span>` : "0"}</td>
                 <td>
-                    <button class="btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="window.openAppDetailsDrawer('${app.id}')">View</button>
-                    <button class="btn-secondary" data-modify-app="${app.id}" style="padding: 4px 8px; font-size:11px;">Modify</button>
+                    <button type="button" class="btn-secondary" data-view-app="${app.id}" style="padding: 4px 8px; font-size:11px;">View</button>
+                    <button type="button" class="btn-secondary" data-modify-app="${app.id}" style="padding: 4px 8px; font-size:11px;">Modify</button>
+                    <button type="button" class="btn-secondary" data-manage-app="${app.id}" style="padding: 4px 8px; font-size:11px; background-color: var(--accent); color: white; border: none;">Manage</button>
                 </td>
             `;
+            tr.querySelector("[data-view-app]")?.addEventListener("click", () => window.openAppDetailsDrawer(app.id));
             tr.querySelector("[data-modify-app]")?.addEventListener("click", () => openModifyApp(app));
+            tr.querySelector("[data-manage-app]")?.addEventListener("click", () => window.openManageAppModal(app.id));
             tableBody.appendChild(tr);
         });
     }
@@ -1137,17 +1156,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // RENDER ADMIN MODERATION
     async function loadAdminPendingApps() {
         try {
-            const [appsResponse, pendingResponse, activityResponse] = await Promise.all([
-                fetch("/api/admin/apps?per_page=100", { cache: "no-store", headers: { "Accept": "application/json" } }),
-                fetch("/api/admin/apps/pending?per_page=100", { cache: "no-store", headers: { "Accept": "application/json" } }),
-                fetch("/api/admin/activities", { cache: "no-store", headers: { "Accept": "application/json" } })
-            ]);
-            if (!appsResponse.ok) throw new Error("Could not load the admin app catalog.");
-            if (!pendingResponse.ok) throw new Error("Could not load the pending review queue.");
-            if (!activityResponse.ok) throw new Error("Could not load recent moderation activity.");
-            const appsPayload = await appsResponse.json();
-            const pendingPayload = await pendingResponse.json();
-            const activityPayload = await activityResponse.json();
+            const response = await fetch("/api/admin/dashboard", { cache: "no-store", headers: { "Accept": "application/json" } });
+            if (!response.ok) throw new Error("Could not load the admin dashboard payload.");
+            
+            const payload = await response.json();
+            const appsPayload = payload.apps;
+            const pendingPayload = payload.pending;
+            const activityPayload = payload.activities;
+
             const pendingApps = [...new Map(
                 [...(appsPayload.data || []), ...(pendingPayload.data || [])].map(app => [String(app.id), app])
             ).values()];
@@ -1174,16 +1190,31 @@ document.addEventListener("DOMContentLoaded", () => {
                     caption: item.caption || ""
                 })),
                 tags: app.pending_changes?.tags || (app.tags || []).map(tag => tag.name),
-                downloads: 0,
-                rating: 0,
+                downloads: app.downloads_count || 0,
+                rating: parseFloat(app.average_rating) || parseFloat(app.rating) || 0,
                 github: app.pending_changes?.attributes?.repository_url ?? app.repository_url ?? "",
                 demo: app.pending_changes?.attributes?.demo_url ?? app.demo_url ?? "",
                 installCommand: app.pending_changes?.release?.install_command ?? app.latest_release?.install_command ?? "",
                 status: app.pending_changes ? "pending" : app.status,
                 submissionDate: app.submitted_at || app.created_at,
                 updatedAt: app.updated_at || app.created_at,
-                reviews: [],
-                bugs: []
+                reviews: (app.reviews || []).map(r => ({
+                    id: String(r.id),
+                    author: r.user?.name || r.user?.email || "User",
+                    stars: parseInt(r.rating) || 5,
+                    title: r.title || "",
+                    text: r.body || "",
+                    date: r.created_at ? new Date(r.created_at).toISOString().split('T')[0] : ""
+                })),
+                bugs: (app.bug_reports || []).map(b => ({
+                    id: `BUG-${b.id}`,
+                    dbId: b.id,
+                    title: b.title || "",
+                    desc: b.description || "",
+                    severity: b.severity || "medium",
+                    version: b.app_release?.version || "1.0.0",
+                    status: b.status || "open"
+                }))
             }));
             state.logs = activityPayload.map(item => ({
                 time: item.time ? new Date(item.time).toLocaleString() : "—",
@@ -1571,6 +1602,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function triggerAppDownload(appId, buttonNode) {
+        if (state.currentRole === "visitor") {
+            window.openUserAuthModal();
+            return;
+        }
+        if (state.currentRole !== "user") {
+            showToast("This action is available only to app users.", "warning");
+            return;
+        }
         const app = state.apps.find(a => a.id === appId);
         if (!app) return;
 
@@ -1590,6 +1629,14 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!response.ok) throw new Error(result.message || "The download could not be started.");
 
             app.downloads = result.downloads_count;
+            renderDeveloperConsole();
+
+            if (currentPage === "developer") {
+                const today = new Date().toISOString().slice(0, 10);
+                const todayTrend = state.downloadTrend.find(item => item.date === today);
+                if (todayTrend) todayTrend.count = Number(todayTrend.count || 0) + 1;
+                initDeveloperCharts();
+            }
             const link = document.createElement("a");
             link.href = result.download_url;
             link.download = result.filename || "";
@@ -1621,11 +1668,40 @@ document.addEventListener("DOMContentLoaded", () => {
     closeDrawerBtn.addEventListener("click", closeAppDetailsDrawer);
     drawerOverlay.addEventListener("click", closeAppDetailsDrawer);
 
-    window.openAppDetailsDrawer = function(appId) {
+    window.openAppDetailsDrawer = async function(appId) {
         state.activeAppId = appId;
-        const app = state.apps.find(a => a.id === appId);
+        let app = state.apps.find(a => a.id === appId);
         if (!app) return;
 
+        // 1. Render immediately from local state (snappy UI)
+        renderDrawerContent(app);
+
+        // 2. Fetch full fresh details from the server asynchronously
+        try {
+            const response = await fetch(`/api/apps/${encodeURIComponent(app.id)}`);
+            if (response.ok) {
+                const appData = await response.json();
+                const mapped = mapMarketplaceApp(appData);
+                mapped.id = app.id;
+                mapped.databaseId = app.databaseId || app.id;
+                
+                // Update in state
+                const idx = state.apps.findIndex(a => a.id === appId);
+                if (idx !== -1) {
+                    state.apps[idx] = { ...state.apps[idx], ...mapped };
+                }
+                
+                // Re-render only if this app is still open in the drawer!
+                if (state.activeAppId === appId) {
+                    renderDrawerContent(mapped);
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load detailed app data", e);
+        }
+    };
+
+    function renderDrawerContent(app) {
         document.getElementById("detailAppCategory").textContent = app.category.toUpperCase();
         
         const iconNode = document.getElementById("detailAppIcon");
@@ -1661,6 +1737,22 @@ document.addEventListener("DOMContentLoaded", () => {
         techNode.innerHTML = app.tags.map(t => `<span class="tech-tag">${t}</span>`).join("");
         document.getElementById("detailInstallGuide").textContent = app.installCommand;
 
+        const releasesNode = document.getElementById("detailReleaseHistory");
+        if (releasesNode) {
+            const releases = Array.isArray(app.releases) && app.releases.length
+                ? app.releases
+                : [{ version: app.version, status: app.status, notes: "", date: app.submissionDate }];
+            releasesNode.innerHTML = releases.map(release => `
+                <div class="release-history-item">
+                    <div>
+                        <strong>v${release.version}</strong>
+                        <span class="status-badge ${release.status}">${String(release.status).toUpperCase()}</span>
+                    </div>
+                    ${release.notes ? `<p>${release.notes}</p>` : ""}
+                </div>
+            `).join("");
+        }
+
         const screenNode = document.getElementById("detailScreenshotsContainer");
         const canReorderScreenshots = currentPage === "developer" && Array.isArray(app.screenshots);
         const reorderHint = document.getElementById("screenshotReorderHint");
@@ -1683,7 +1775,7 @@ document.addEventListener("DOMContentLoaded", () => {
         drawerOverlay.style.display = "block";
         drawerOverlay.style.opacity = "1";
         drawer.classList.add("open");
-    };
+    }
 
     function closeAppDetailsDrawer() {
         drawer.classList.remove("open");
@@ -1749,6 +1841,26 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function renderAppReviewsAndBugs(app) {
+        const isVisitor = state.currentRole === "visitor";
+        const canSubmitUserContent = state.currentRole === "user";
+        const drawerReviewsSection = document.getElementById("drawerReviewsSection");
+        const drawerBugsSection = document.getElementById("drawerBugsSection");
+        const drawerAuthPrompt = document.getElementById("drawerAuthPrompt");
+        const reviewButton = document.getElementById("openReviewFormBtn");
+        const bugButton = document.getElementById("openBugFormBtn");
+
+        if (drawerReviewsSection) drawerReviewsSection.style.display = "block";
+        if (drawerBugsSection) drawerBugsSection.style.display = isVisitor ? "none" : "block";
+        if (drawerAuthPrompt) drawerAuthPrompt.style.display = isVisitor ? "block" : "none";
+        if (reviewButton) {
+            reviewButton.hidden = !canSubmitUserContent;
+            reviewButton.style.display = canSubmitUserContent ? "" : "none";
+        }
+        if (bugButton) {
+            bugButton.hidden = !canSubmitUserContent;
+            bugButton.style.display = canSubmitUserContent ? "" : "none";
+        }
+
         const ratingNum = app.rating;
         document.getElementById("distAvgNum").textContent = ratingNum > 0 ? ratingNum.toFixed(1) : "0.0";
         document.getElementById("distTotalCount").textContent = `${app.reviews.length} reviews`;
@@ -1843,6 +1955,35 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Helper to reload app details from the server
+    async function reloadAppDetails(appId) {
+        try {
+            const response = await fetch(`/api/apps/${encodeURIComponent(appId)}`);
+            if (!response.ok) throw new Error("Failed to load app data.");
+            const appData = await response.json();
+            const mapped = mapMarketplaceApp(appData);
+            
+            // Replace in state.apps
+            const idx = state.apps.findIndex(a => a.id === appId);
+            if (idx !== -1) {
+                mapped.id = state.apps[idx].id;
+                mapped.databaseId = state.apps[idx].databaseId || state.apps[idx].id;
+                state.apps[idx] = { ...state.apps[idx], ...mapped };
+            }
+            
+            // Refresh views
+            if (state.activeAppId === appId) {
+                renderDrawerContent(mapped);
+            }
+            renderHomeView();
+            renderDiscoverAppGrid(globalSearch.value, "all");
+            renderDeveloperConsole();
+            renderAdminModeration();
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
     // REVIEW AND BUG SUBMIT HANDLERS
     const openReviewFormBtn = document.getElementById("openReviewFormBtn");
     const reviewFormContainer = document.getElementById("reviewFormContainer");
@@ -1850,6 +1991,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const cancelReviewBtn = document.getElementById("cancelReviewBtn");
 
     openReviewFormBtn.addEventListener("click", () => {
+        if (state.currentRole === "visitor") {
+            window.openUserAuthModal();
+            return;
+        }
+        if (state.currentRole !== "user") {
+            showToast("Reviews can be submitted only by app users.", "warning");
+            return;
+        }
         reviewFormContainer.style.display = "block";
         reviewFormContainer.scrollIntoView({ behavior: 'smooth' });
     });
@@ -1859,7 +2008,7 @@ document.addEventListener("DOMContentLoaded", () => {
         reviewSubmitForm.reset();
     });
 
-    reviewSubmitForm.addEventListener("submit", (e) => {
+    reviewSubmitForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         const app = state.apps.find(a => a.id === state.activeAppId);
         if (!app) return;
@@ -1867,26 +2016,33 @@ document.addEventListener("DOMContentLoaded", () => {
         const rating = parseInt(document.getElementById("reviewRatingInput").value);
         const title = document.getElementById("reviewTitleInput").value;
         const comment = document.getElementById("reviewCommentInput").value;
-        const author = state.currentRole === "visitor" ? "Guest_User" : (state.currentRole === "developer" ? "Developer_Mercer" : "Admin_Officer");
 
-        const pad = (n) => String(n).padStart(2, "0");
-        const todayStr = `${new Date().getFullYear()}-${pad(new Date().getMonth()+1)}-${pad(new Date().getDate())}`;
+        try {
+            const response = await fetch(`/api/apps/${encodeURIComponent(app.databaseId || app.id)}/reviews`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.content || ""
+                },
+                body: JSON.stringify({
+                    rating: rating,
+                    title: title,
+                    body: comment
+                })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || "Failed to submit review.");
 
-        app.reviews.push({ author, stars: rating, title, text: comment, date: todayStr });
+            showToast("Review submitted successfully!", "success");
 
-        const totalStars = app.reviews.reduce((acc, curr) => acc + curr.stars, 0);
-        app.rating = totalStars / app.reviews.length;
+            await reloadAppDetails(app.id);
 
-        showToast("Review submitted successfully!", "success");
-        logActivity(author, "Posted application review", `${app.name} (${rating} Stars)`, "Success");
-
-        reviewFormContainer.style.display = "none";
-        reviewSubmitForm.reset();
-
-        renderAppReviewsAndBugs(app);
-        renderHomeView();
-        renderDiscoverAppGrid(globalSearch.value, "all");
-        renderDeveloperConsole();
+            reviewFormContainer.style.display = "none";
+            reviewSubmitForm.reset();
+        } catch (error) {
+            showToast(error.message, "danger");
+        }
     });
 
     const openBugFormBtn = document.getElementById("openBugFormBtn");
@@ -1895,6 +2051,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const cancelBugBtn = document.getElementById("cancelBugBtn");
 
     openBugFormBtn.addEventListener("click", () => {
+        if (state.currentRole === "visitor") {
+            window.openUserAuthModal();
+            return;
+        }
+        if (state.currentRole !== "user") {
+            showToast("Bug reports can be submitted only by app users.", "warning");
+            return;
+        }
         bugFormContainer.style.display = "block";
         bugFormContainer.scrollIntoView({ behavior: 'smooth' });
     });
@@ -1904,7 +2068,7 @@ document.addEventListener("DOMContentLoaded", () => {
         bugSubmitForm.reset();
     });
 
-    bugSubmitForm.addEventListener("submit", (e) => {
+    bugSubmitForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         const app = state.apps.find(a => a.id === state.activeAppId);
         if (!app) return;
@@ -1913,26 +2077,33 @@ document.addEventListener("DOMContentLoaded", () => {
         const severity = document.getElementById("bugSeverityInput").value;
         const version = document.getElementById("bugVersionInput").value;
         const desc = document.getElementById("bugDescInput").value;
-        const author = state.currentRole === "visitor" ? "Guest_User" : (state.currentRole === "developer" ? "Developer_Mercer" : "Admin_Officer");
 
-        const prefix = app.name.slice(0, 2).toUpperCase();
-        const num = Math.floor(Math.random() * 900) + 100;
-        const bugId = `${prefix}-${num}`;
+        try {
+            const response = await fetch(`/api/apps/${encodeURIComponent(app.databaseId || app.id)}/bug-reports`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.content || ""
+                },
+                body: JSON.stringify({
+                    title: title,
+                    severity: severity,
+                    environment: { version: version },
+                    description: desc
+                })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || "Failed to submit bug report.");
 
-        app.bugs.push({ id: bugId, title, desc, severity, version, status: "open" });
+            showToast(`Bug report filed successfully!`, "success");
 
-        showToast(`Bug report filed as ${bugId}`, "success");
-        logActivity(author, "Logged software bug report", `${app.name} (${bugId})`, "Open");
+            await reloadAppDetails(app.id);
 
-        bugFormContainer.style.display = "none";
-        bugSubmitForm.reset();
-
-        renderAppReviewsAndBugs(app);
-        renderDeveloperConsole();
-        renderAdminModeration();
-
-        if (state.activeTab === "developer") {
-            initDeveloperCharts();
+            bugFormContainer.style.display = "none";
+            bugSubmitForm.reset();
+        } catch (error) {
+            showToast(error.message, "danger");
         }
     });
 
@@ -1959,12 +2130,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     openSubmitModalBtn?.addEventListener("click", () => {
         delete appPublishForm.dataset.editingAppId;
+        document.getElementById("submitModalTitle").textContent = "Submit Software to Appex";
+        appPublishForm.querySelector('button[type="submit"]').textContent = document.body.dataset.page === "admin" ? "Publish Now" : "Submit to Queue";
         submitAppModal.style.display = "flex";
     });
 
     function openModifyApp(app) {
         if (!submitAppModal || !appPublishForm) return;
         appPublishForm.dataset.editingAppId = app.id;
+        document.getElementById("submitModalTitle").textContent = `Modify ${app.name}`;
+        appPublishForm.querySelector('button[type="submit"]').textContent = "Save Changes";
         document.getElementById("formAppName").value = app.name;
         document.getElementById("formAppShortDesc").value = app.tagline;
         document.getElementById("formAppDesc").value = app.description;
@@ -1979,6 +2154,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("formAppVersion").value = app.version === "—" ? "1.0.0" : app.version;
         const matchingCategory = Array.from(appCategory?.options || []).find(option => option.value === app.categorySlug);
         if (matchingCategory) appCategory.value = matchingCategory.value;
+        appCategory?.dispatchEvent(new Event("change"));
         submitAppModal.style.display = "flex";
     }
 
@@ -1987,10 +2163,15 @@ document.addEventListener("DOMContentLoaded", () => {
         submitAppModal.style.display = "none";
         appPublishForm.reset();
         delete appPublishForm.dataset.editingAppId;
+        document.getElementById("submitModalTitle").textContent = "Submit Software to Appex";
+        appPublishForm.querySelector('button[type="submit"]').textContent = "Submit to Queue";
     };
 
     closeSubmitModalBtn?.addEventListener("click", closeModal);
     cancelPublishBtn?.addEventListener("click", closeModal);
+    submitAppModal?.addEventListener("click", event => {
+        if (event.target === submitAppModal) closeModal();
+    });
 
     appPublishForm?.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -2014,6 +2195,40 @@ document.addEventListener("DOMContentLoaded", () => {
         const iconInput = document.getElementById("formAppIcon");
         
         const tags = tagsInput ? tagsInput.split(",").map(t => t.trim().toLowerCase()) : ["appex", "tool"];
+
+        if (document.body.dataset.page === "admin") {
+            const submitButton = appPublishForm.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            try {
+                const response = await fetch('/api/admin/apps', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                    },
+                    body: JSON.stringify({
+                        name, category_name: category, tagline, description: desc,
+                        repository_url: github || null, demo_url: demo || null,
+                        license, version, install_command: install || null,
+                        size_bytes: parseFileSize(size), download_url: downloadUrl || null, tags
+                    })
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const validation = result.errors ? Object.values(result.errors).flat().join(' ') : result.message;
+                    throw new Error(validation || 'The app could not be published.');
+                }
+                showToast(result.message || `"${name}" published immediately.`, 'success');
+                closeModal();
+                window.setTimeout(() => window.location.reload(), 700);
+            } catch (error) {
+                showToast(error.message, 'danger');
+            } finally {
+                submitButton.disabled = false;
+            }
+            return;
+        }
 
         const appId = name.toLowerCase().replace(/[^a-z0-9]/g, "-");
 
@@ -2165,7 +2380,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const downloadsCanvas = document.getElementById("downloadsChart");
         const bugsCanvas = document.getElementById("bugsChart");
 
-        if (!downloadsCanvas || !bugsCanvas || typeof Chart === "undefined") return;
+        if (!downloadsCanvas || !bugsCanvas) return;
+
+        if (typeof Chart === "undefined") {
+            drawFallbackDeveloperCharts(downloadsCanvas, bugsCanvas);
+            return;
+        }
 
         if (downloadsChartInstance) downloadsChartInstance.destroy();
         if (bugsChartInstance) bugsChartInstance.destroy();
@@ -2175,22 +2395,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const labelColor = isDark ? "#9898a0" : "#5f5f69";
 
         const ctxDownload = downloadsCanvas.getContext("2d");
-        const totalD = state.apps.reduce((acc, curr) => acc + curr.downloads, 0);
-
-        const downloadsData = [
-            Math.round(totalD * 0.72), 
-            Math.round(totalD * 0.76), 
-            Math.round(totalD * 0.80), 
-            Math.round(totalD * 0.85), 
-            Math.round(totalD * 0.90), 
-            Math.round(totalD * 0.96), 
-            totalD
-        ];
+        const downloadsData = state.downloadTrend.map(item => Number(item.count || 0));
+        const downloadLabels = state.downloadTrend.map(item => item.label);
 
         downloadsChartInstance = new Chart(ctxDownload, {
             type: 'line',
             data: {
-                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                labels: downloadLabels,
                 datasets: [{
                     label: 'Downloads',
                     data: downloadsData,
@@ -2248,4 +2459,386 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+
+    function prepareFallbackCanvas(canvas) {
+        const ratio = window.devicePixelRatio || 1;
+        const width = Math.max(280, canvas.clientWidth || 600);
+        const height = Math.max(180, canvas.clientHeight || 240);
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+        const context = canvas.getContext("2d");
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        context.clearRect(0, 0, width, height);
+        return { context, width, height };
+    }
+
+    function drawFallbackDeveloperCharts(downloadsCanvas, bugsCanvas) {
+        const isDark = document.documentElement.dataset.theme === "dark";
+        const textColor = isDark ? "#9898a0" : "#5f5f69";
+        const gridColor = isDark ? "rgba(255,255,255,.10)" : "rgba(0,0,0,.08)";
+        const trend = state.downloadTrend.length
+            ? state.downloadTrend
+            : Array.from({ length: 7 }, (_, index) => ({ label: `Day ${index + 1}`, count: 0 }));
+        const downloadCanvas = prepareFallbackCanvas(downloadsCanvas);
+        const ctx = downloadCanvas.context;
+        const padding = { left: 36, right: 14, top: 14, bottom: 30 };
+        const plotWidth = downloadCanvas.width - padding.left - padding.right;
+        const plotHeight = downloadCanvas.height - padding.top - padding.bottom;
+        const maxValue = Math.max(1, ...trend.map(item => Number(item.count || 0)));
+
+        ctx.strokeStyle = gridColor;
+        ctx.fillStyle = textColor;
+        ctx.font = "11px sans-serif";
+        ctx.textAlign = "center";
+        trend.forEach((item, index) => {
+            const x = padding.left + (plotWidth * index / Math.max(1, trend.length - 1));
+            ctx.beginPath();
+            ctx.moveTo(x, padding.top);
+            ctx.lineTo(x, padding.top + plotHeight);
+            ctx.stroke();
+            ctx.fillText(item.label || "", x, downloadCanvas.height - 8);
+        });
+
+        ctx.strokeStyle = "#0071e3";
+        ctx.lineWidth = 3;
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        trend.forEach((item, index) => {
+            const x = padding.left + (plotWidth * index / Math.max(1, trend.length - 1));
+            const y = padding.top + plotHeight - (Number(item.count || 0) / maxValue * plotHeight);
+            index === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        const bugCanvas = prepareFallbackCanvas(bugsCanvas);
+        const bugCounts = ["low", "medium", "high"].map(severity => state.apps.reduce(
+            (total, app) => total + app.bugs.filter(bug => bug.status === "open" && bug.severity === severity).length,
+            0
+        ));
+        const totalBugs = bugCounts.reduce((sum, count) => sum + count, 0);
+        const colors = ["#0071e3", "#ff9f0a", "#d83b01"];
+        const centerX = bugCanvas.width / 2;
+        const centerY = bugCanvas.height / 2 - 10;
+        const radius = Math.min(bugCanvas.width, bugCanvas.height) * .28;
+        let startAngle = -Math.PI / 2;
+
+        if (totalBugs === 0) {
+            bugCanvas.context.strokeStyle = gridColor;
+            bugCanvas.context.lineWidth = 18;
+            bugCanvas.context.beginPath();
+            bugCanvas.context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            bugCanvas.context.stroke();
+        } else {
+            bugCounts.forEach((count, index) => {
+                const endAngle = startAngle + (count / totalBugs * Math.PI * 2);
+                bugCanvas.context.strokeStyle = colors[index];
+                bugCanvas.context.lineWidth = 18;
+                bugCanvas.context.beginPath();
+                bugCanvas.context.arc(centerX, centerY, radius, startAngle, endAngle);
+                bugCanvas.context.stroke();
+                startAngle = endAngle;
+            });
+        }
+        bugCanvas.context.fillStyle = textColor;
+        bugCanvas.context.font = "12px sans-serif";
+        bugCanvas.context.textAlign = "center";
+        bugCanvas.context.fillText(`${totalBugs} open bugs`, centerX, centerY + 4);
+    }
+
+    // -----------------------------------------
+    // USER AUTH MODAL HANDLERS
+    // -----------------------------------------
+    window.openUserAuthModal = function() {
+        if (serverRole) {
+            showToast(`You are already signed in as ${roleProfiles[serverRole]?.role || serverRole}.`, "warning");
+            return;
+        }
+        const modal = document.getElementById("userAuthModalOverlay");
+        if (modal) {
+            modal.style.display = "flex";
+            switchUserAuthTab("login");
+        }
+    };
+
+    window.closeUserAuthModal = function() {
+        const modal = document.getElementById("userAuthModalOverlay");
+        if (modal) {
+            modal.style.display = "none";
+        }
+    };
+
+    function switchUserAuthTab(tab) {
+        const loginContainer = document.getElementById("userLoginFormContainer");
+        const registerContainer = document.getElementById("userRegisterFormContainer");
+        const modalTitle = document.getElementById("userAuthModalTitle");
+
+        if (tab === "login") {
+            if (loginContainer) loginContainer.style.display = "block";
+            if (registerContainer) registerContainer.style.display = "none";
+            if (modalTitle) modalTitle.textContent = "Sign in to Appex";
+        } else {
+            if (registerContainer) registerContainer.style.display = "block";
+            if (loginContainer) loginContainer.style.display = "none";
+            if (modalTitle) modalTitle.textContent = "Create an Appex Account";
+        }
+    }
+
+    document.getElementById("toggleToRegister")?.addEventListener("click", (e) => {
+        e.preventDefault();
+        switchUserAuthTab("register");
+    });
+    document.getElementById("toggleToLogin")?.addEventListener("click", (e) => {
+        e.preventDefault();
+        switchUserAuthTab("login");
+    });
+    document.getElementById("closeUserAuthModalBtn")?.addEventListener("click", window.closeUserAuthModal);
+    document.getElementById("userAuthModalOverlay")?.addEventListener("click", (e) => {
+        if (e.target === document.getElementById("userAuthModalOverlay")) {
+            window.closeUserAuthModal();
+        }
+    });
+
+    document.getElementById("headerSignInBtn")?.addEventListener("click", window.openUserAuthModal);
+    document.getElementById("dropdownSignInBtn")?.addEventListener("click", window.openUserAuthModal);
+    document.getElementById("drawerSignInBtn")?.addEventListener("click", window.openUserAuthModal);
+
+    // Admin navigation now uses the shared account modal instead of a
+    // separate login page. Open it after the named route redirects home.
+    if (new URLSearchParams(window.location.search).get("login") === "admin") {
+        window.openUserAuthModal();
+    }
+
+    document.getElementById("userLoginForm")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("userLoginEmail").value;
+        const password = document.getElementById("userLoginPassword").value;
+
+        try {
+            const response = await fetch("/user/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.content || ""
+                },
+                body: JSON.stringify({ email, password })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || "Login failed.");
+
+            if (result.user && result.user.role === 'admin') {
+                showToast("Admin access verified. Opening moderation workspace...", "success");
+                setTimeout(() => {
+                    window.location.href = "/admin";
+                }, 1000);
+            } else {
+                showToast("Logged in successfully! Reloading...", "success");
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            }
+        } catch (err) {
+            showToast(err.message, "danger");
+        }
+    });
+
+    document.getElementById("userRegisterForm")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = document.getElementById("userRegisterName").value;
+        const email = document.getElementById("userRegisterEmail").value;
+        const password = document.getElementById("userRegisterPassword").value;
+        const password_confirmation = document.getElementById("userRegisterPasswordConfirmation").value;
+
+        try {
+            const response = await fetch("/user/register", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.content || ""
+                },
+                body: JSON.stringify({ name, email, password, password_confirmation })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || "Registration failed.");
+
+            showToast("Registered successfully! Reloading...", "success");
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } catch (err) {
+            showToast(err.message, "danger");
+        }
+    });
+
+    // -----------------------------------------
+    // DEVELOPER APP MANAGEMENT MODAL HANDLERS
+    // -----------------------------------------
+    window.openManageAppModal = async function(appId) {
+        state.manageActiveAppId = appId;
+        let app = state.apps.find(a => a.id === appId);
+        if (!app) return;
+
+        const overlay = document.getElementById("manageAppModalOverlay");
+        if (overlay) {
+            overlay.style.display = "flex";
+            switchManageTab("Downloads");
+        }
+
+        // Render initial data from local memory
+        renderManageAppContent(app);
+
+        // Fetch fresh details (reviews and bug reports) from the server
+        try {
+            const response = await fetch(`/api/apps/${encodeURIComponent(app.id)}`);
+            if (response.ok) {
+                const appData = await response.json();
+                const mapped = mapMarketplaceApp(appData);
+                mapped.id = app.id;
+                mapped.databaseId = app.databaseId || app.id;
+
+                // Update in state
+                const idx = state.apps.findIndex(a => a.id === appId);
+                if (idx !== -1) {
+                    state.apps[idx] = { ...state.apps[idx], ...mapped };
+                }
+
+                if (state.manageActiveAppId === appId) {
+                    renderManageAppContent(state.apps[idx]);
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load analytics data", e);
+        }
+    };
+
+    window.closeManageAppModal = function() {
+        const overlay = document.getElementById("manageAppModalOverlay");
+        if (overlay) {
+            overlay.style.display = "none";
+        }
+        state.manageActiveAppId = null;
+    };
+
+    function switchManageTab(tabName) {
+        const tabs = ["Downloads", "Bugs", "Reviews"];
+        tabs.forEach(t => {
+            const btn = document.getElementById(`tabManage${t}`);
+            const view = document.getElementById(`viewManage${t}`);
+            if (t === tabName) {
+                btn?.classList.add("active");
+                if (btn) {
+                    btn.style.color = "var(--accent)";
+                    btn.style.borderBottom = "2.5px solid var(--accent)";
+                }
+                if (view) view.style.display = "block";
+            } else {
+                btn?.classList.remove("active");
+                if (btn) {
+                    btn.style.color = "var(--text-secondary)";
+                    btn.style.borderBottom = "2.5px solid transparent";
+                }
+                if (view) view.style.display = "none";
+            }
+        });
+    }
+
+    function renderManageAppContent(app) {
+        document.getElementById("manageAppModalSubtitle").textContent = `${app.name} — Version ${app.version}`;
+        document.getElementById("manageDownloadsCount").textContent = app.downloads.toLocaleString();
+
+        // Render bugs list
+        const bugsList = document.getElementById("manageBugsList");
+        if (bugsList) {
+            bugsList.innerHTML = "";
+            if (app.bugs.length === 0) {
+                bugsList.innerHTML = `<div style="text-align: center; padding: 24px; color: var(--text-secondary); font-size: 13px;">No bug reports reported.</div>`;
+            } else {
+                app.bugs.forEach(bug => {
+                    const isResolved = bug.status === "resolved" || bug.status === "closed";
+                    const card = document.createElement("div");
+                    card.className = "analytics-card";
+                    card.innerHTML = `
+                        <div class="analytics-card-header">
+                            <div>
+                                <span class="bug-id" style="font-size: 11px; font-weight: 700; color: var(--accent);">${bug.id}</span>
+                                <h4 class="analytics-card-title">${bug.title}</h4>
+                            </div>
+                            <span class="bug-status ${bug.status}" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase;">${bug.status}</span>
+                        </div>
+                        <p class="analytics-card-desc">${bug.desc}</p>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
+                            <span>Affects v${bug.version} • Severity: <span class="bug-severity ${bug.severity}" style="font-weight: 700; text-transform: uppercase;">${bug.severity}</span></span>
+                            ${!isResolved ? `<button type="button" class="btn-primary" data-resolve-bug="${bug.dbId}" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">Mark Resolved</button>` : ""}
+                        </div>
+                    `;
+                    card.querySelector("[data-resolve-bug]")?.addEventListener("click", async () => {
+                        try {
+                            const res = await fetch(`/api/developer/apps/${app.databaseId || app.id}/bugs/${bug.dbId}/status`, {
+                                method: "PUT",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "Accept": "application/json",
+                                    "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.content || ""
+                                },
+                                body: JSON.stringify({ status: "resolved" })
+                            });
+                            if (!res.ok) throw new Error("Could not update bug status.");
+                            showToast("Bug marked as resolved!", "success");
+                            // Reload details in modal
+                            await openManageAppModal(app.id);
+                            // Refresh developer dashboard UI
+                            loadDeveloperApps();
+                        } catch (err) {
+                            showToast(err.message, "danger");
+                        }
+                    });
+                    bugsList.appendChild(card);
+                });
+            }
+        }
+
+        // Render reviews list
+        const reviewsList = document.getElementById("manageReviewsList");
+        if (reviewsList) {
+            reviewsList.innerHTML = "";
+            if (app.reviews.length === 0) {
+                reviewsList.innerHTML = `<div style="text-align: center; padding: 24px; color: var(--text-secondary); font-size: 13px;">No reviews recorded.</div>`;
+            } else {
+                app.reviews.forEach(rev => {
+                    let starsSvg = "";
+                    for (let i = 1; i <= 5; i++) {
+                        starsSvg += `<svg viewBox="0 0 24 24" style="width:12px; height:12px; fill:${i <= rev.stars ? 'var(--warning)' : 'var(--text-tertiary)'}"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+                    }
+                    const card = document.createElement("div");
+                    card.className = "analytics-card";
+                    card.innerHTML = `
+                        <div class="analytics-card-header">
+                            <div>
+                                <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">${rev.author}</span>
+                                <h4 class="analytics-card-title">${rev.title}</h4>
+                            </div>
+                            <div style="display: flex; gap: 2px;">${starsSvg}</div>
+                        </div>
+                        <p class="analytics-card-desc">${rev.text}</p>
+                        <div style="font-size: 11px; color: var(--text-secondary); text-align: right; margin-top: 4px;">
+                            Published on ${rev.date}
+                        </div>
+                    `;
+                    reviewsList.appendChild(card);
+                });
+            }
+        }
+    }
+
+    // Bind event listeners for developer analytics modal tabs
+    document.getElementById("tabManageDownloads")?.addEventListener("click", () => switchManageTab("Downloads"));
+    document.getElementById("tabManageBugs")?.addEventListener("click", () => switchManageTab("Bugs"));
+    document.getElementById("tabManageReviews")?.addEventListener("click", () => switchManageTab("Reviews"));
+    document.getElementById("closeManageAppModalBtn")?.addEventListener("click", window.closeManageAppModal);
+    document.getElementById("manageAppModalOverlay")?.addEventListener("click", (e) => {
+        if (e.target === document.getElementById("manageAppModalOverlay")) {
+            window.closeManageAppModal();
+        }
+    });
 });

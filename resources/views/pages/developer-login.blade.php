@@ -14,7 +14,7 @@
         data-auth-mode="server"
         data-auth-account="{{ auth()->user()->role }}"
         data-auth-name="{{ auth()->user()->name }}"
-        data-auth-role="{{ auth()->user()->role === 'admin' ? 'Administrator' : 'Developer Publisher' }}"
+        data-auth-role="{{ match(auth()->user()->role) { 'admin' => 'Administrator', 'developer' => 'Developer Publisher', 'user' => 'App User', default => 'Visitor' } }}"
     @endauth
 >
     <div class="app-container">
@@ -69,12 +69,6 @@
                             <line x1="12" y1="2" x2="12" y2="22" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                         <span class="developer-nav-label">Publish App</span>
-                    </a>
-                    <a class="nav-item admin-access-nav" href="{{ route('admin.login') }}" data-page-link="admin-login">
-                        <svg viewBox="0 0 24 24">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        <span class="admin-nav-label">Admin Login</span>
                     </a>
                 </nav>
 
@@ -213,7 +207,6 @@
                 <div class="footer-col">
                     <h3>Platform & Moderation</h3>
                     <ul>
-                        <li><a href="{{ route('admin.login') }}" class="footer-tab-link">Admin Login</a></li>
                         <li><a href="#">Verification Queue</a></li>
                         <li><a href="#">Report Abuse & Spam</a></li>
                         <li><a href="#">Terms of Use</a></li>
