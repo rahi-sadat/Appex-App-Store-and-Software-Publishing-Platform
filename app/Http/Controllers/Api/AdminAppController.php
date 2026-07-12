@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use App\Models\MarketplaceApp;
 use App\Models\ModerationAction;
 use App\Models\Tag;
@@ -13,6 +14,61 @@ use Illuminate\Support\Str;
 
 class AdminAppController extends Controller
 {
+    public function store(Request $request): JsonResponse
+    {
+        $admin = $this->admin($request);
+        $data = $request->validate([
+            'category_name' => ['required', 'string', 'max:80'],
+            'name' => ['required', 'string', 'max:160', 'unique:marketplace_apps,name'],
+            'tagline' => ['nullable', 'string', 'max:220'],
+            'description' => ['nullable', 'string'],
+            'repository_url' => ['nullable', 'url', 'max:255'],
+            'demo_url' => ['nullable', 'url', 'max:255'],
+            'license' => ['nullable', 'string', 'max:80'],
+            'version' => ['required', 'string', 'max:80'],
+            'install_command' => ['nullable', 'string', 'max:255'],
+            'size_bytes' => ['nullable', 'integer', 'min:0'],
+            'download_url' => ['nullable', 'url', 'max:2048'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string', 'max:40'],
+        ]);
+
+        $categoryName = trim($data['category_name']);
+        $category = Category::firstOrCreate(
+            ['slug' => Str::slug($categoryName)],
+            ['name' => $categoryName, 'is_active' => true, 'sort_order' => 999]
+        );
+
+        $app = DB::transaction(function () use ($admin, $data, $category) {
+            $app = MarketplaceApp::create([
+                'developer_id' => $admin->id,
+                'category_id' => $category->id,
+                'name' => $data['name'],
+                'slug' => $this->uniqueSlug($data['name']),
+                'tagline' => $data['tagline'] ?? null,
+                'description' => $data['description'] ?? null,
+                'source' => empty($data['repository_url']) ? 'manual' : 'github',
+                'status' => 'approved',
+                'repository_url' => $data['repository_url'] ?? null,
+                'demo_url' => $data['demo_url'] ?? null,
+                'license' => $data['license'] ?? null,
+                'submitted_at' => now(),
+                'approved_at' => now(),
+                'published_at' => now(),
+            ]);
+
+            $this->syncTags($app, $data['tags'] ?? []);
+            $this->upsertRelease($app, $data);
+            $this->recordAction($admin->id, 'published_app', $app, 'Published directly by an administrator.');
+
+            return $app;
+        });
+
+        return response()->json([
+            'message' => 'App published immediately.',
+            'app' => $app->load(['category', 'tags', 'latestRelease.assets']),
+        ], 201);
+    }
     public function index(Request $request): JsonResponse
     {
         $this->admin($request);
@@ -283,6 +339,20 @@ class AdminAppController extends Controller
         $app->tags()->sync($ids);
     }
 
+    private function uniqueSlug(string $name): string
+    {
+        $base = Str::slug($name);
+        $slug = $base;
+        $suffix = 2;
+
+        while (MarketplaceApp::withTrashed()->where('slug', $slug)->exists()) {
+            $slug = "{$base}-{$suffix}";
+            $suffix++;
+        }
+
+        return $slug;
+    }
+
     private function upsertRelease(MarketplaceApp $app, array $releaseData): void
     {
         $hasReleaseChange = collect($releaseData)->contains(fn ($value) => $value !== null && $value !== '');
@@ -318,5 +388,43 @@ class AdminAppController extends Controller
                 ]
             );
         }
+    }
+
+    public function dashboard(Request $request): JsonResponse
+    {
+        $this->admin($request);
+
+        $approvedApps = MarketplaceApp::where('status', 'approved')
+            ->with(['developer:id,name,email', 'category', 'tags', 'screenshots', 'latestRelease.assets'])
+            ->latest('updated_at')
+            ->get();
+
+        $pendingApps = MarketplaceApp::where(function ($query) {
+                $query->where('status', 'pending')->orWhereNotNull('pending_changes');
+            })
+            ->with(['developer:id,name,email', 'category', 'tags', 'screenshots', 'latestRelease.assets'])
+            ->oldest('submitted_at')
+            ->get();
+
+        $actions = ModerationAction::with('admin:id,name,email')->latest()->limit(50)->get();
+        $appNames = MarketplaceApp::withTrashed()->whereIn('id', $actions->pluck('target_id'))->pluck('name', 'id');
+        $activities = $actions->map(fn (ModerationAction $action) => [
+            'id' => $action->id,
+            'time' => $action->created_at?->toIso8601String(),
+            'admin' => $action->admin?->name ?? $action->admin?->email ?? 'Administrator',
+            'action' => $action->action,
+            'target' => $appNames[$action->target_id] ?? "App #{$action->target_id}",
+            'note' => $action->note,
+        ]);
+
+        return response()->json([
+            'apps' => [
+                'data' => $approvedApps
+            ],
+            'pending' => [
+                'data' => $pendingApps
+            ],
+            'activities' => $activities
+        ]);
     }
 }

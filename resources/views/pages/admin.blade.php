@@ -61,20 +61,21 @@
                         </svg>
                         <span>About</span>
                     </a>
-                    <a class="nav-item developer-access-nav" href="{{ route('developer.login') }}" data-page-link="developer-login">
-                        <svg viewBox="0 0 24 24">
-                            <polyline points="16 18 22 12 16 6" stroke-linecap="round" stroke-linejoin="round"/>
-                            <polyline points="8 6 2 12 8 18" stroke-linecap="round" stroke-linejoin="round"/>
-                            <line x1="12" y1="2" x2="12" y2="22" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        <span class="developer-nav-label">Publish App</span>
-                    </a>
                     <a class="nav-item active admin-access-nav" href="{{ route('admin.login') }}" data-page-link="admin-login" aria-current="page">
                         <svg viewBox="0 0 24 24">
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span class="admin-nav-label">Admin Login</span>
+                        <span class="admin-nav-label">Admin Dashboard</span>
                     </a>
+                    @guest
+                    <button class="nav-item" id="headerSignInBtn" type="button" style="background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 500;">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <circle cx="12" cy="7" r="4" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Sign In</span>
+                    </button>
+                    @endguest
                 </nav>
 
                 <button class="theme-toggle-btn" id="themeToggle" type="button" aria-label="Switch theme color mode">
@@ -100,7 +101,9 @@
             <div class="tab-panel active" id="panel-admin">
                 <div class="view-header">
                     <span class="view-date">Safety & Moderation Control</span>
-                    <h1 class="view-title">Admin Moderation</h1>
+                    <h1 class="view-title">Admin Moderation
+                        <button class="btn-primary" id="openSubmitModalBtn" type="button">Publish App</button>
+                    </h1>
                 </div>
 
                 <div class="console-row">
@@ -181,8 +184,6 @@
                 <div class="footer-col">
                     <h3>Developer Console</h3>
                     <ul>
-                        <li><a href="{{ route('developer.login') }}" class="footer-tab-link">Publish App</a></li>
-                        <li><a href="{{ route('developer.login') }}" class="footer-tab-link">Developer Login</a></li>
                         <li><a href="{{ route('api.docs') }}" class="footer-tab-link">REST API Reference</a></li>
                         <li><a href="#">Publishing Guidelines</a></li>
                         <li><a href="#">Security & Sandbox policies</a></li>
@@ -191,7 +192,7 @@
                 <div class="footer-col">
                     <h3>Platform & Moderation</h3>
                     <ul>
-                        <li><a href="{{ route('admin.login') }}" class="footer-tab-link">Admin Login</a></li>
+                        <li><a href="{{ route('admin') }}" class="footer-tab-link">Admin Dashboard</a></li>
                         <li><a href="#">Verification Queue</a></li>
                         <li><a href="#">Report Abuse & Spam</a></li>
                         <li><a href="#">Terms of Use</a></li>
@@ -302,11 +303,17 @@
                 </div>
             </div>
 
+            <!-- Sign-in placeholder for guest users -->
+            <div id="drawerAuthPrompt" style="display: none; border-top: 1px solid var(--border-color); padding: 24px 0; text-align: center;">
+                <p style="color: var(--text-secondary); margin-bottom: 14px; font-size: 14px;">Sign in to download, write reviews, and report bugs. Ratings and existing reviews remain public.</p>
+                <button class="btn-primary" id="drawerSignInBtn" style="padding: 8px 16px; font-size: 13px;" type="button">Sign In / Register</button>
+            </div>
+
             <!-- Reviews and ratings section -->
-            <div class="detail-section">
+            <div class="detail-section" id="drawerReviewsSection">
                 <h3 class="view-title" style="font-size: 16px; margin-bottom: 12px;">
                     <span>Ratings & Reviews</span>
-                    <button class="btn-primary" id="openReviewFormBtn" style="padding: 6px 12px; font-size: 12px;" type="button">Write Review</button>
+                    <button class="btn-primary" id="openReviewFormBtn" style="display:none" type="button" hidden>Write Review</button>
                 </h3>
                 
                 <div class="rating-distribution">
@@ -358,10 +365,10 @@
             </div>
 
             <!-- Bug Reporting and Tracking -->
-            <div class="detail-section" style="border-top: 1px solid var(--border-color); padding-top: 24px;">
+            <div class="detail-section" id="drawerBugsSection" style="border-top: 1px solid var(--border-color); padding-top: 24px;">
                 <h3 class="view-title" style="font-size: 16px; margin-bottom: 12px;">
                     <span>Bug Reports</span>
-                    <button class="btn-primary" id="openBugFormBtn" style="padding: 6px 12px; font-size: 12px; background-color: var(--danger);" type="button">Report Bug</button>
+                    <button class="btn-primary" id="openBugFormBtn" style="display:none" type="button" hidden>Report Bug</button>
                 </h3>
 
                 <!-- Bug submission form -->
@@ -485,7 +492,7 @@
 
                 <div class="modal-footer">
                     <button type="button" class="btn-secondary" id="cancelPublishBtn">Cancel</button>
-                    <button type="submit" class="btn-primary">Submit to Queue</button>
+                    <button type="submit" class="btn-primary">Publish Now</button>
                 </div>
             </form>
         </div>
@@ -527,6 +534,8 @@
 
     <!-- Live Alerts / Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
+
+    @include('components.user-auth-modal')
 
     <script>window.__adminPendingApps = @json($pendingApps);</script>
     <script src="{{ asset('assets/js/login.js') }}"></script>
