@@ -33,6 +33,7 @@ class MarketplaceApp extends Model
     protected $fillable = [
         'developer_id',
         'category_id',
+        'platform',
         'name',
         'slug',
         'tagline',
