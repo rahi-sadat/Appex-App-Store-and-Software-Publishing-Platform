@@ -80,6 +80,7 @@ class DeveloperAppController extends Controller
             'demo_url' => ['nullable', 'url', 'max:255'],
             'license' => ['nullable', 'string', 'max:80'],
             'primary_language' => ['nullable', 'string', 'max:80'],
+            'platform' => ['nullable', 'string', 'in:desktop,ios,mac,android,web'],
             'tags' => ['nullable', 'array'],
             'tags.*' => ['string', 'max:40'],
         ]);
@@ -119,7 +120,7 @@ class DeveloperAppController extends Controller
             $source = 'github';
         }
 
-        // New apps start as drafts so developers can finish screenshots/releases before review.
+        // New apps start as drafts so developers can finish images/releases before review.
         $app = MarketplaceApp::create([
             'developer_id' => $user->id,
             'category_id' => $categoryId,
@@ -133,6 +134,7 @@ class DeveloperAppController extends Controller
             'demo_url' => $data['demo_url'] ?? null,
             'license' => $data['license'] ?? null,
             'primary_language' => $data['primary_language'] ?? null,
+            'platform' => $data['platform'] ?? 'web',
         ]);
 
         // Create a stable, human-readable media folder as soon as the app exists.
@@ -159,6 +161,7 @@ class DeveloperAppController extends Controller
             'demo_url' => ['nullable', 'url', 'max:255'],
             'license' => ['nullable', 'string', 'max:80'],
             'primary_language' => ['nullable', 'string', 'max:80'],
+            'platform' => ['nullable', 'string', 'in:desktop,ios,mac,android,web'],
             'version' => ['nullable', 'string', 'max:80'],
             'release_notes' => ['nullable', 'string'],
             'install_command' => ['nullable', 'string', 'max:255'],
@@ -321,7 +324,7 @@ class DeveloperAppController extends Controller
         }
 
         return response()->json([
-            'message' => 'Screenshot uploaded.',
+            'message' => 'Image uploaded.',
             'screenshot' => $screenshot,
             'url' => Storage::disk('public')->url($path),
         ], 201);
@@ -362,7 +365,7 @@ class DeveloperAppController extends Controller
 
         if ($currentIds->all() !== $submittedIds->all()) {
             return response()->json([
-                'message' => 'The screenshot order must include every screenshot for this app exactly once.',
+                'message' => 'The image order must include every image for this app exactly once.',
             ], 422);
         }
 
@@ -376,9 +379,44 @@ class DeveloperAppController extends Controller
         });
 
         return response()->json([
-            'message' => 'Screenshot order updated.',
+            'message' => 'Image order updated.',
             'screenshots' => $marketplaceApp->screenshots()->get(),
         ]);
+    }
+
+    public function destroy(Request $request, int $app): JsonResponse
+    {
+        $user = $this->developer($request);
+        $marketplaceApp = MarketplaceApp::where('developer_id', $user->id)->find($app);
+
+        if (! $marketplaceApp) {
+            return response()->json([
+                'message' => 'This app is already deleted or no longer belongs to your developer account.',
+            ], 404);
+        }
+
+        if (in_array($marketplaceApp->status, ['draft', 'pending', 'rejected'], true)) {
+            $this->purgeUnpublishedSubmission($marketplaceApp);
+            return response()->json(['message' => 'Submission canceled successfully.']);
+        } elseif ($marketplaceApp->status === 'approved') {
+            $request->validate(['reason' => 'required|string|max:500']);
+            $marketplaceApp->is_deletion_requested = true;
+            $marketplaceApp->deletion_reason = $request->reason;
+            $marketplaceApp->save();
+            return response()->json(['message' => 'Deletion request submitted for admin review.']);
+        }
+
+        return response()->json(['message' => 'Cannot delete this app in its current state.'], 422);
+    }
+
+    private function purgeUnpublishedSubmission(MarketplaceApp $marketplaceApp): void
+    {
+        DB::transaction(function () use ($marketplaceApp) {
+            $marketplaceApp->tags()->detach();
+            $marketplaceApp->forceDelete();
+        });
+
+        Storage::disk('public')->deleteDirectory("apps/{$marketplaceApp->slug}");
     }
 
     private function developer(Request $request)

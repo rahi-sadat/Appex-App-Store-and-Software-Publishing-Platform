@@ -24,7 +24,8 @@ class AppController extends Controller
             $categorySlug = $request->input('category');
 
             $query->whereHas('category', function ($categoryQuery) use ($categorySlug) {
-                $categoryQuery->where('slug', $categorySlug);
+                $categoryQuery->where('slug', $categorySlug)
+                    ->orWhere('name', $categorySlug);
             });
         }
 
@@ -34,6 +35,10 @@ class AppController extends Controller
             $query->whereHas('tags', function ($tagQuery) use ($tagSlug) {
                 $tagQuery->where('slug', $tagSlug);
             });
+        }
+
+        if ($request->filled('platform')) {
+            $query->where('platform', $request->input('platform'));
         }
 
         if ($request->filled('search')) {
@@ -96,10 +101,19 @@ class AppController extends Controller
             ?? $marketplaceApp->latestRelease?->assets->first();
 
         if (! $asset || (! $asset->file_path && ! $asset->external_url)) {
-            return response()->json(['message' => 'No downloadable file has been configured for this app yet.'], 422);
+            if ($marketplaceApp->demo_url) {
+                $downloadUrl = $marketplaceApp->demo_url;
+                $filename = null;
+            } elseif ($marketplaceApp->repository_url) {
+                $downloadUrl = $marketplaceApp->repository_url;
+                $filename = null;
+            } else {
+                return response()->json(['message' => 'No downloadable file has been configured for this app yet.'], 422);
+            }
+        } else {
+            $downloadUrl = $asset->external_url ?: Storage::disk('public')->url($asset->file_path);
+            $filename = $asset->name;
         }
-
-        $downloadUrl = $asset->external_url ?: Storage::disk('public')->url($asset->file_path);
 
         $userId = null;
 
@@ -124,7 +138,7 @@ class AppController extends Controller
             'message' => 'Download recorded.',
             'downloads_count' => $marketplaceApp->downloads()->count(),
             'download_url' => $downloadUrl,
-            'filename' => $asset->name,
+            'filename' => $filename,
         ]);
     }
 

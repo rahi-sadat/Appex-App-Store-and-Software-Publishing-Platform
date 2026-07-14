@@ -20,6 +20,7 @@ class AdminAppController extends Controller
         $data = $request->validate([
             'category_name' => ['required', 'string', 'max:80'],
             'name' => ['required', 'string', 'max:160', 'unique:marketplace_apps,name'],
+            'platform' => ['nullable', 'string', 'in:desktop,ios,mac,android,web'],
             'tagline' => ['nullable', 'string', 'max:220'],
             'description' => ['nullable', 'string'],
             'repository_url' => ['nullable', 'url', 'max:255'],
@@ -43,6 +44,7 @@ class AdminAppController extends Controller
             $app = MarketplaceApp::create([
                 'developer_id' => $admin->id,
                 'category_id' => $category->id,
+                'platform' => $data['platform'] ?? 'web',
                 'name' => $data['name'],
                 'slug' => $this->uniqueSlug($data['name']),
                 'tagline' => $data['tagline'] ?? null,
@@ -100,7 +102,9 @@ class AdminAppController extends Controller
         $this->admin($request);
 
         $apps = MarketplaceApp::where(function ($query) {
-                $query->where('status', 'pending')->orWhereNotNull('pending_changes');
+                $query->where('status', 'pending')
+                      ->orWhereNotNull('pending_changes')
+                      ->orWhere('is_deletion_requested', true);
             })
             ->with(['developer:id,name,email', 'category', 'tags', 'screenshots', 'latestRelease.assets'])
             ->oldest('submitted_at')
@@ -147,10 +151,73 @@ class AdminAppController extends Controller
 
         $this->recordAction($admin->id, 'approved_app', $marketplaceApp, $request->input('note'));
 
+        // Notify developer
+        $marketplaceApp->developer->notify(new \App\Notifications\AppStatusNotification($marketplaceApp, 'approved'));
+
+        // Notify users who downloaded the app about the update (if it's a new release)
+        if ($marketplaceApp->latestRelease) {
+            $version = $marketplaceApp->latestRelease->version;
+            $downloaders = \App\Models\Download::where('app_id', $marketplaceApp->id)
+                ->where('app_release_id', '!=', $marketplaceApp->latestRelease->id)
+                ->with('user')
+                ->get()
+                ->pluck('user')
+                ->unique();
+                
+            foreach ($downloaders as $downloader) {
+                if ($downloader) {
+                    $downloader->notify(new \App\Notifications\AppUpdateNotification($marketplaceApp, $version));
+                }
+            }
+        }
+
         return response()->json([
             'message' => 'App approved.',
             'app' => $marketplaceApp,
         ]);
+    }
+
+    public function approveDeletion(Request $request, int $app): JsonResponse
+    {
+        $admin = $this->admin($request);
+        $marketplaceApp = MarketplaceApp::findOrFail($app);
+
+        if ($marketplaceApp->is_deletion_requested) {
+            $marketplaceApp->delete(); // Soft delete
+            $this->recordAction($admin->id, 'approved_deletion', $marketplaceApp, 'Approved developer deletion request.');
+            
+            // Notify developer
+            $marketplaceApp->developer->notify(new \App\Notifications\AppStatusNotification($marketplaceApp, 'deleted', 'Approved developer deletion request.'));
+
+            return response()->json([
+                'message' => 'Deletion request approved. App deleted.',
+            ]);
+        }
+
+        return response()->json(['error' => 'App has not requested deletion.'], 400);
+    }
+
+    public function rejectDeletion(Request $request, int $app): JsonResponse
+    {
+        $admin = $this->admin($request);
+        $marketplaceApp = MarketplaceApp::findOrFail($app);
+
+        if ($marketplaceApp->is_deletion_requested) {
+            $marketplaceApp->is_deletion_requested = false;
+            $marketplaceApp->deletion_reason = null;
+            $marketplaceApp->save();
+
+            $this->recordAction($admin->id, 'rejected_deletion', $marketplaceApp, 'Rejected developer deletion request.');
+            
+            // Notify developer
+            $marketplaceApp->developer->notify(new \App\Notifications\AppStatusNotification($marketplaceApp, 'deletion rejected', 'Rejected developer deletion request.'));
+            
+            return response()->json([
+                'message' => 'Deletion request rejected.',
+            ]);
+        }
+
+        return response()->json(['error' => 'App has not requested deletion.'], 400);
     }
 
     public function update(Request $request, int $app): JsonResponse
@@ -160,6 +227,7 @@ class AdminAppController extends Controller
         $data = $request->validate([
             'category_id' => ['nullable', 'exists:categories,id'],
             'name' => ['required', 'string', 'max:160'],
+            'platform' => ['nullable', 'string', 'in:desktop,ios,mac,android,web'],
             'tagline' => ['nullable', 'string', 'max:220'],
             'description' => ['nullable', 'string'],
             'repository_url' => ['nullable', 'url', 'max:255'],
@@ -222,6 +290,9 @@ class AdminAppController extends Controller
 
         $this->recordAction($admin->id, 'rejected_app', $marketplaceApp, $data['note'] ?? null);
 
+        // Notify developer
+        $marketplaceApp->developer->notify(new \App\Notifications\AppStatusNotification($marketplaceApp, 'rejected', $data['note'] ?? null));
+
         return response()->json([
             'message' => 'App rejected.',
             'app' => $marketplaceApp,
@@ -242,7 +313,7 @@ class AdminAppController extends Controller
 
         if ($currentIds->all() !== $submittedIds->all()) {
             return response()->json([
-                'message' => 'The screenshot order must include every screenshot for this app exactly once.',
+                'message' => 'The image order must include every image for this app exactly once.',
             ], 422);
         }
 
@@ -256,7 +327,7 @@ class AdminAppController extends Controller
         });
 
         return response()->json([
-            'message' => 'Screenshot order updated.',
+            'message' => 'Image order updated.',
             'screenshots' => $marketplaceApp->screenshots()->get(),
         ]);
     }
