@@ -57,6 +57,8 @@
                 </button>
             </nav>
 
+            @include('components.header-user-actions')
+
             <button class="theme-toggle-btn" id="themeToggle" type="button" aria-label="Switch theme color mode">
                 <svg viewBox="0 0 24 24">
                     <circle cx="12" cy="12" r="5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -565,61 +567,7 @@
     </main>
 
     <!-- Microsoft Store Style Multi-Column Footer -->
-    <footer class="site-footer">
-        <div class="footer-grid">
-            <div class="footer-col">
-                <h3>Browse Store</h3>
-                <ul>
-                    <li><a href="#" class="footer-tab-link" data-tab="today">Marketplace Home</a></li>
-                    <li><a href="#" class="footer-tab-link" data-tab="about">About Appex</a></li>
-                    <li><a href="#" class="footer-tab-link" data-tab="discover">Explore Software</a></li>
-                    <li><a href="#" class="footer-tab-link" data-category="Web App">Web Applications</a></li>
-                    <li><a href="#" class="footer-tab-link" data-category="Laravel Package">Laravel Packages</a></li>
-                    <li><a href="#" class="footer-tab-link" data-category="Script & Tool">Scripts & Tools</a></li>
-                </ul>
-            </div>
-            <div class="footer-col">
-                <h3>Developer Console</h3>
-                <ul>
-                    <li><a href="#" class="footer-tab-link" data-tab="developer-login">Publish App</a></li>
-                    <li><a href="#" class="footer-tab-link" data-tab="developer-login">Developer Login</a></li>
-                    <li><a href="#" class="footer-tab-link" data-tab="api">REST API Reference</a></li>
-                    <li><a href="#">Publishing Guidelines</a></li>
-                    <li><a href="#">Security & Sandbox policies</a></li>
-                </ul>
-            </div>
-            <div class="footer-col">
-                <h3>Platform & Moderation</h3>
-                <ul>
-                    <li><a href="#">Verification Queue</a></li>
-                    <li><a href="#">Report Abuse & Spam</a></li>
-                    <li><a href="#">Terms of Use</a></li>
-                    <li><a href="#">Privacy Agreement</a></li>
-                </ul>
-            </div>
-            <div class="footer-col">
-                <h3>Appex Corporation</h3>
-                <ul>
-                    <li><a href="#" class="footer-tab-link" data-tab="about">About Appex</a></li>
-                    <li><a href="#">Company Careers</a></li>
-                    <li><a href="#">Corporate Press</a></li>
-                    <li><a href="#">Security Bulletins</a></li>
-                    <li><a href="#">Contact Support</a></li>
-                </ul>
-            </div>
-        </div>
-
-        <div class="footer-bottom">
-            <span class="copyright">&copy; 2026 Appex Marketplace Corporation. All rights reserved.</span>
-            <div class="footer-links">
-                <a href="#">English (United States)</a>
-                <a href="#">Privacy & Cookies</a>
-                <a href="#">Terms of Sale</a>
-                <a href="#">Trademarks</a>
-                <a href="#">Safety & Eco</a>
-            </div>
-        </div>
-    </footer>
+    @include('components.site-footer', ['mode' => 'spa'])
 </div>
 
 <!-- App Details Drawer Overlay -->
@@ -646,9 +594,12 @@
                 <div class="app-detail-badge-row" id="detailAppTags">
                     <!-- Tags injected by JS -->
                 </div>
-                <div class="app-detail-get">
+                <div class="app-detail-get" style="display: flex; gap: 8px; align-items: center;">
                     <button class="btn-get" id="detailGetBtn" type="button">GET</button>
-                    <span class="downloads-stat" id="detailDownloadsCount">0 downloads</span>
+                    @auth
+                        <button class="btn-secondary" id="detailWishlistBtn" type="button" style="border: 1px solid var(--border-color); background: var(--bg-card); padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; color: var(--text-primary);">Save</button>
+                    @endauth
+                    <span class="downloads-stat" id="detailDownloadsCount" style="margin-left: 8px;">0 downloads</span>
                 </div>
             </div>
         </div>
@@ -676,9 +627,9 @@
             </div>
         </div>
 
-        <!-- Image Screenshots Gallery -->
+        <!-- App Images Gallery -->
         <div class="detail-section">
-            <h3 class="detail-section-title">Screenshots</h3>
+            <h3 class="detail-section-title">Images</h3>
             <div class="screenshots-gallery" id="detailScreenshotsContainer">
                 <!-- Images injected by JS -->
             </div>

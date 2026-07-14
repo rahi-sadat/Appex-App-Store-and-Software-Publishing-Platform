@@ -64,6 +64,7 @@ document.addEventListener("DOMContentLoaded", () => {
         name: app.name,
         developer: app.developer?.name || "Unknown developer",
         category: app.category?.name || "Other",
+        categorySlug: app.category?.slug || "",
         tagline: app.tagline || "",
         description: app.description || "",
         version: app.latest_release?.version || "—",
@@ -71,6 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
         downloadUrl: app.latest_release?.assets?.[0]?.external_url || "",
         license: app.license || "—",
         primaryLanguage: app.primary_language || "",
+        platform: app.platform || "web",
         iconTheme: "blue",
         iconUrl: app.icon_path ? `/storage/${app.icon_path}` : null,
         screenshots: (app.screenshots || []).map(item => ({
@@ -617,7 +619,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         
         state.activeTab = "discover";
-        renderDiscoverAppGrid(query, "all");
+        const activeCategory = document.querySelector("#categoryPillContainer .category-pill.active")?.dataset.category || "";
+        const activePlatform = document.querySelector("#platformPillContainer .category-pill.active")?.dataset.platform || "";
+        renderDiscoverAppGrid(query, activeCategory, activePlatform);
     });
 
     globalSearch?.addEventListener("keydown", (e) => {
@@ -869,28 +873,40 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // RENDER DISCOVER APP GRID
-    function renderDiscoverAppGrid(searchQuery = "", selectedCategory = "all") {
+    function normalizeFilterValue(value) {
+        return String(value || "")
+            .toLowerCase()
+            .replace(/&/g, "and")
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+    }
+
+    function renderDiscoverAppGrid(searchQuery = "", selectedCategory = "", selectedPlatform = "") {
         const grid = document.getElementById("discoverAppGrid");
         if (!grid) return;
 
         grid.innerHTML = "";
 
         const query = searchQuery.toLowerCase().trim();
+        const normalizedCategory = normalizeFilterValue(selectedCategory);
+        const normalizedPlatform = normalizeFilterValue(selectedPlatform);
         const filtered = state.apps.filter(app => {
             if (app.status !== "approved") return false;
             
-            const matchesCategory = selectedCategory === "all" || app.category === selectedCategory;
+            const appCategorySlug = normalizeFilterValue(app.categorySlug || app.category);
+            const matchesCategory = normalizedCategory === "" || normalizedCategory === "all" || appCategorySlug === normalizedCategory;
+            const matchesPlatform = normalizedPlatform === "" || normalizedPlatform === "all" || normalizeFilterValue(app.platform || "web") === normalizedPlatform;
             const matchesSearch = query === "" || 
                 app.name.toLowerCase().includes(query) || 
                 app.tagline.toLowerCase().includes(query) || 
                 app.tags.some(t => t.toLowerCase().includes(query)) ||
                 app.developer.toLowerCase().includes(query);
                 
-            return matchesCategory && matchesSearch;
+            return matchesCategory && matchesPlatform && matchesSearch;
         });
 
         if (filtered.length === 0) {
-            grid.innerHTML = `<div style="grid-column: 1/-1; padding: 40px 0; text-align: center; color: var(--text-secondary); font-size: 14px;">No applications match search criteria.</div>`;
+            grid.innerHTML = `<div style="grid-column: 1/-1; padding: 40px 0; text-align: center; color: var(--text-secondary); font-size: 14px;">No applications match this category and platform combination.</div>`;
             return;
         }
 
@@ -929,7 +945,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Bind Discover Pills filter
-    const discoverPills = document.querySelectorAll(".category-pill");
+    const discoverPills = document.querySelectorAll("#categoryPillContainer .category-pill");
+    const platformPills = document.querySelectorAll("#platformPillContainer .category-pill");
+    
+    function applyDiscoverFilters() {
+        const activeCategory = document.querySelector("#categoryPillContainer .category-pill.active")?.dataset.category || "";
+        const activePlatform = document.querySelector("#platformPillContainer .category-pill.active")?.dataset.platform || "";
+        const searchVal = document.getElementById("globalAppSearch")?.value || "";
+        renderDiscoverAppGrid(searchVal, activeCategory, activePlatform);
+
+        const titleNode = document.getElementById("discoverGridTitle");
+        if (titleNode) {
+            let catName = document.querySelector("#categoryPillContainer .category-pill.active")?.textContent || "Featured Releases";
+            if (catName === "All Categories") catName = "Featured Releases";
+            titleNode.textContent = catName;
+        }
+    }
+
     discoverPills.forEach(pill => {
         pill.addEventListener("click", () => {
             discoverPills.forEach(p => {
@@ -938,38 +970,47 @@ document.addEventListener("DOMContentLoaded", () => {
             });
             pill.classList.add("active");
             pill.setAttribute("aria-selected", "true");
+            applyDiscoverFilters();
+        });
+    });
 
-            const currentCategory = pill.dataset.category;
-            const searchVal = document.getElementById("globalAppSearch").value;
-            renderDiscoverAppGrid(searchVal, currentCategory);
-
-            const titleNode = document.getElementById("discoverGridTitle");
-            titleNode.textContent = currentCategory === "all" ? "Featured Releases" : `${currentCategory}s`;
+    platformPills.forEach(pill => {
+        pill.addEventListener("click", () => {
+            platformPills.forEach(p => {
+                p.classList.remove("active");
+                p.setAttribute("aria-selected", "false");
+            });
+            pill.classList.add("active");
+            pill.setAttribute("aria-selected", "true");
+            applyDiscoverFilters();
         });
     });
 
     const discoverGrid = document.getElementById("discoverAppGrid");
     if (discoverGrid) {
         const params = new URLSearchParams(window.location.search);
-        const initialCategory = params.get("category") || "all";
+        const initialCategory = params.get("category") || "";
+        const initialPlatform = params.get("platform") || "";
         const initialQuery = params.get("q") || "";
 
         if (globalSearch && initialQuery) {
             globalSearch.value = initialQuery;
         }
 
+        const normalizedInitialCategory = normalizeFilterValue(initialCategory);
         discoverPills.forEach(p => {
-            const isActive = p.dataset.category === initialCategory;
+            const isActive = normalizeFilterValue(p.dataset.category) === normalizedInitialCategory || (initialCategory === "" && p.dataset.category === "");
             p.classList.toggle("active", isActive);
             p.setAttribute("aria-selected", String(isActive));
         });
 
-        const titleNode = document.getElementById("discoverGridTitle");
-        if (titleNode) {
-            titleNode.textContent = initialCategory === "all" ? "Featured Releases" : `${initialCategory}s`;
-        }
+        platformPills.forEach(p => {
+            const isActive = p.dataset.platform === initialPlatform || (initialPlatform === "" && p.dataset.platform === "");
+            p.classList.toggle("active", isActive);
+            p.setAttribute("aria-selected", String(isActive));
+        });
 
-        renderDiscoverAppGrid(initialQuery, initialCategory);
+        applyDiscoverFilters();
     }
 
     async function loadPublicApps() {
@@ -987,6 +1028,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 name: app.pending_changes?.attributes?.name || app.name,
                 developer: app.developer?.name || "Unknown developer",
                 category: app.category?.name || "Other",
+                categorySlug: app.category?.slug || "",
                 tagline: app.pending_changes?.attributes?.tagline ?? app.tagline ?? "",
                 description: app.pending_changes?.attributes?.description ?? app.description ?? "",
                 version: app.latest_release?.version || "—",
@@ -994,6 +1036,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 downloadUrl: app.latest_release?.assets?.[0]?.external_url || "",
                 license: app.license || "—",
                 primaryLanguage: app.primary_language || "",
+                platform: app.platform || "web",
                 iconTheme: "blue",
                 iconUrl: app.icon_path ? `/storage/${app.icon_path}` : null,
                 screenshots: (app.screenshots || []).map(item => ({
@@ -1012,7 +1055,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }));
             renderHomeView();
             const params = new URLSearchParams(window.location.search);
-            renderDiscoverAppGrid(globalSearch?.value || params.get("q") || "", params.get("category") || "all");
+            renderDiscoverAppGrid(globalSearch?.value || params.get("q") || "", params.get("category") || "", params.get("platform") || "");
         } catch (error) {
             showToast(error.message, "danger");
         }
@@ -1144,11 +1187,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     <button type="button" class="btn-secondary" data-view-app="${app.id}" style="padding: 4px 8px; font-size:11px;">View</button>
                     <button type="button" class="btn-secondary" data-modify-app="${app.id}" style="padding: 4px 8px; font-size:11px;">Modify</button>
                     <button type="button" class="btn-secondary" data-manage-app="${app.id}" style="padding: 4px 8px; font-size:11px; background-color: var(--accent); color: white; border: none;">Manage</button>
+                    <button type="button" class="btn-secondary" data-delete-app="${app.id}" style="padding: 4px 8px; font-size:11px; background-color: var(--danger); color: white; border: none;">Delete</button>
                 </td>
             `;
             tr.querySelector("[data-view-app]")?.addEventListener("click", () => window.openAppDetailsDrawer(app.id));
             tr.querySelector("[data-modify-app]")?.addEventListener("click", () => openModifyApp(app));
             tr.querySelector("[data-manage-app]")?.addEventListener("click", () => window.openManageAppModal(app.id));
+            tr.querySelector("[data-delete-app]")?.addEventListener("click", () => window.openDeleteAppModal(app));
             tableBody.appendChild(tr);
         });
     }
@@ -1198,6 +1243,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 status: app.pending_changes ? "pending" : app.status,
                 submissionDate: app.submitted_at || app.created_at,
                 updatedAt: app.updated_at || app.created_at,
+                isDeletionRequested: app.is_deletion_requested || false,
+                deletionReason: app.deletion_reason || "",
                 reviews: (app.reviews || []).map(r => ({
                     id: String(r.id),
                     author: r.user?.name || r.user?.email || "User",
@@ -1273,6 +1320,38 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 queueTableBody.appendChild(tr);
             });
+        }
+
+        // Admin Deletion Requests
+        const deletionTableBody = document.getElementById("adminDeletionTableBody");
+        const deletionCount = document.getElementById("adminDeletionCount");
+        if (deletionTableBody && deletionCount) {
+            deletionTableBody.innerHTML = "";
+            const deletionRequests = state.apps.filter(a => a.isDeletionRequested);
+            deletionCount.textContent = `${deletionRequests.length} Pending`;
+            
+            if (deletionRequests.length === 0) {
+                deletionTableBody.innerHTML = `<tr><td colspan="5" style="padding: 24px; text-align: center; color: var(--text-secondary);">No deletion requests pending.</td></tr>`;
+            } else {
+                deletionRequests.forEach(app => {
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td><strong>${app.name}</strong><br><small style="color:var(--text-secondary)">v${app.version}</small></td>
+                        <td>${app.developer}</td>
+                        <td style="max-width:300px;white-space:normal;color:var(--text-secondary);font-size:13px;">${app.deletionReason}</td>
+                        <td>${new Date(app.updatedAt).toLocaleDateString()}</td>
+                        <td>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn-secondary" style="font-size:11px;padding:4px 8px;" data-action="approve-deletion" data-id="${app.id}">Approve</button>
+                                <button class="btn-secondary" style="font-size:11px;padding:4px 8px;color:var(--danger);" data-action="reject-deletion" data-id="${app.id}">Reject</button>
+                            </div>
+                        </td>
+                    `;
+                    tr.querySelector('[data-action="approve-deletion"]').addEventListener("click", () => window.handleAdminDeletionReview(app.id, 'approve'));
+                    tr.querySelector('[data-action="reject-deletion"]').addEventListener("click", () => window.handleAdminDeletionReview(app.id, 'reject'));
+                    deletionTableBody.appendChild(tr);
+                });
+            }
         }
 
         const logsTableBody = document.getElementById("adminLogsTableBody");
@@ -1435,8 +1514,8 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("adminEditTags").value = app.tags.join(", ");
         const screenshotContainer = document.getElementById("adminReviewScreenshots");
         screenshotContainer.innerHTML = app.screenshots.length
-            ? app.screenshots.map((screenshot, index) => `<div class="screenshot-sortable" draggable="true" data-screenshot-id="${screenshot.id}" title="Drag to reorder"><a href="${screenshot.url}" target="_blank" rel="noopener"><img src="${screenshot.url}" alt="Submitted app screenshot" style="width:150px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);"></a>${index === 0 ? '<small style="display:block;color:var(--accent);font-weight:700;margin-top:4px;">Cover</small>' : ''}</div>`).join("")
-            : `<small style="color:var(--text-secondary)">No screenshots submitted.</small>`;
+            ? app.screenshots.map((screenshot, index) => `<div class="screenshot-sortable" draggable="true" data-screenshot-id="${screenshot.id}" title="Drag to reorder"><a href="${screenshot.url}" target="_blank" rel="noopener"><img src="${screenshot.url}" alt="Submitted app image" style="width:150px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);"></a>${index === 0 ? '<small style="display:block;color:var(--accent);font-weight:700;margin-top:4px;">Cover</small>' : ''}</div>`).join("")
+            : `<small style="color:var(--text-secondary)">No images submitted.</small>`;
         document.getElementById("adminScreenshotHint").style.display = app.screenshots.length > 1 ? "block" : "none";
         if (app.screenshots.length > 1) enableAdminScreenshotSorting(screenshotContainer, app);
         document.getElementById("adminRejectReason").value = "";
@@ -1665,8 +1744,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const drawerOverlay = document.getElementById("drawerOverlay");
     const closeDrawerBtn = document.getElementById("closeDrawerBtn");
 
-    closeDrawerBtn.addEventListener("click", closeAppDetailsDrawer);
-    drawerOverlay.addEventListener("click", closeAppDetailsDrawer);
+    closeDrawerBtn?.addEventListener("click", closeAppDetailsDrawer);
+    drawerOverlay?.addEventListener("click", closeAppDetailsDrawer);
 
     window.openAppDetailsDrawer = async function(appId) {
         state.activeAppId = appId;
@@ -1724,9 +1803,48 @@ document.addEventListener("DOMContentLoaded", () => {
         getBtn.style.pointerEvents = "auto";
         getBtn.onclick = () => triggerAppDownload(app.id, getBtn);
 
+        const wishlistBtn = document.getElementById("detailWishlistBtn");
+        if (wishlistBtn) {
+            wishlistBtn.textContent = "Save";
+            wishlistBtn.onclick = async () => {
+                try {
+                    wishlistBtn.disabled = true;
+                    wishlistBtn.textContent = "...";
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+                    const appId = app.databaseId || app.id;
+
+                    if (!csrfToken || !appId) {
+                        throw new Error("Unable to save this app right now.");
+                    }
+
+                    const res = await fetch('/wishlist/toggle', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                        body: JSON.stringify({ app_id: appId })
+                    });
+                    const data = await res.json().catch(() => ({}));
+
+                    if (!res.ok) {
+                        throw new Error(data.message || "Unable to update wishlist.");
+                    }
+
+                    wishlistBtn.textContent = data.status === 'added' ? 'Saved!' : 'Save';
+                    showToast(data.status === 'added' ? "App saved to wishlist." : "App removed from wishlist.", "success");
+                } catch (error) {
+                    wishlistBtn.textContent = "Save";
+                    showToast(error.message, "danger");
+                } finally {
+                    wishlistBtn.disabled = false;
+                }
+            };
+        }
+
         document.getElementById("detailDownloadsCount").textContent = `${app.downloads.toLocaleString()} downloads`;
 
-        document.getElementById("detailRatingVal").querySelector("span").textContent = app.rating > 0 ? app.rating.toFixed(1) : "0.0";
+        const detailRatingSpan = document.getElementById("detailRatingVal").querySelector("span");
+        if (detailRatingSpan) {
+            detailRatingSpan.textContent = app.rating > 0 ? app.rating.toFixed(1) : "0.0";
+        }
         document.getElementById("detailVersionVal").textContent = app.version;
         document.getElementById("detailSizeVal").textContent = app.size;
         document.getElementById("detailLicenseVal").textContent = app.license;
@@ -1761,13 +1879,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (Array.isArray(app.screenshots) && app.screenshots.length) {
             screenNode.innerHTML = app.screenshots.map((screenshot, index) => `
                 <div class="screenshot-sortable" draggable="${canReorderScreenshots}" data-screenshot-id="${screenshot.id}" title="${canReorderScreenshots ? "Drag to reorder" : ""}">
-                    <img class="screenshot-item" src="${screenshot.url}" alt="${screenshot.caption || `Screenshot ${index + 1}`}">
+                    <img class="screenshot-item" src="${screenshot.url}" alt="${screenshot.caption || `App image ${index + 1}`}">
                     ${index === 0 ? '<small style="display:block;color:var(--accent);font-weight:700;margin-top:4px;">Cover</small>' : ''}
                 </div>
             `).join("");
             if (canReorderScreenshots) enableScreenshotSorting(screenNode, app);
         } else {
-            screenNode.innerHTML = `<small style="color:var(--text-secondary);">No screenshots uploaded yet.</small>`;
+            screenNode.innerHTML = `<small style="color:var(--text-secondary);">No images uploaded yet.</small>`;
         }
 
         renderAppReviewsAndBugs(app);
@@ -1830,7 +1948,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: JSON.stringify({ screenshot_ids: screenshotIds.map(Number) })
             });
             const result = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(result.message || "Could not update screenshot order.");
+            if (!response.ok) throw new Error(result.message || "Could not update image order.");
             app.screenshots = screenshotIds.map(id => app.screenshots.find(item => item.id === id));
             window.openAppDetailsDrawer(app.id);
             showToast(result.message, "success");
@@ -1990,7 +2108,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const reviewSubmitForm = document.getElementById("reviewSubmitForm");
     const cancelReviewBtn = document.getElementById("cancelReviewBtn");
 
-    openReviewFormBtn.addEventListener("click", () => {
+    openReviewFormBtn?.addEventListener("click", () => {
         if (state.currentRole === "visitor") {
             window.openUserAuthModal();
             return;
@@ -2003,12 +2121,12 @@ document.addEventListener("DOMContentLoaded", () => {
         reviewFormContainer.scrollIntoView({ behavior: 'smooth' });
     });
 
-    cancelReviewBtn.addEventListener("click", () => {
+    cancelReviewBtn?.addEventListener("click", () => {
         reviewFormContainer.style.display = "none";
         reviewSubmitForm.reset();
     });
 
-    reviewSubmitForm.addEventListener("submit", async (e) => {
+    reviewSubmitForm?.addEventListener("submit", async (e) => {
         e.preventDefault();
         const app = state.apps.find(a => a.id === state.activeAppId);
         if (!app) return;
@@ -2050,7 +2168,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const bugSubmitForm = document.getElementById("bugSubmitForm");
     const cancelBugBtn = document.getElementById("cancelBugBtn");
 
-    openBugFormBtn.addEventListener("click", () => {
+    openBugFormBtn?.addEventListener("click", () => {
         if (state.currentRole === "visitor") {
             window.openUserAuthModal();
             return;
@@ -2063,12 +2181,12 @@ document.addEventListener("DOMContentLoaded", () => {
         bugFormContainer.scrollIntoView({ behavior: 'smooth' });
     });
 
-    cancelBugBtn.addEventListener("click", () => {
+    cancelBugBtn?.addEventListener("click", () => {
         bugFormContainer.style.display = "none";
         bugSubmitForm.reset();
     });
 
-    bugSubmitForm.addEventListener("submit", async (e) => {
+    bugSubmitForm?.addEventListener("submit", async (e) => {
         e.preventDefault();
         const app = state.apps.find(a => a.id === state.activeAppId);
         if (!app) return;
@@ -2118,6 +2236,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const appCategory = document.getElementById("formAppCategory");
     const newCategoryGroup = document.getElementById("newCategoryGroup");
     const newCategoryInput = document.getElementById("formAppNewCategory");
+    const publishSubmitStatus = document.getElementById("publishSubmitStatus");
+
+    const setPublishSubmitStatus = message => {
+        if (!publishSubmitStatus) return;
+        publishSubmitStatus.style.display = "block";
+        publishSubmitStatus.textContent = message;
+    };
+
+    const clearPublishSubmitStatus = () => {
+        if (!publishSubmitStatus) return;
+        publishSubmitStatus.style.display = "none";
+        publishSubmitStatus.textContent = "";
+    };
 
     appCategory?.addEventListener("change", () => {
         const isNew = appCategory.value === "__new__";
@@ -2132,6 +2263,7 @@ document.addEventListener("DOMContentLoaded", () => {
         delete appPublishForm.dataset.editingAppId;
         document.getElementById("submitModalTitle").textContent = "Submit Software to Appex";
         appPublishForm.querySelector('button[type="submit"]').textContent = document.body.dataset.page === "admin" ? "Publish Now" : "Submit to Queue";
+        window.clearImportedMediaPreview?.();
         submitAppModal.style.display = "flex";
     });
 
@@ -2145,6 +2277,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("formAppDesc").value = app.description;
         document.getElementById("formAppLicense").value = app.license === "—" ? "" : app.license;
         if (document.getElementById("formAppLanguage")) document.getElementById("formAppLanguage").value = app.primaryLanguage || "";
+        if (document.getElementById("formAppPlatform")) document.getElementById("formAppPlatform").value = app.platform || "web";
         document.getElementById("formAppGithub").value = app.github;
         document.getElementById("formAppDemo").value = app.demo;
         document.getElementById("formAppInstall").value = app.installCommand || "";
@@ -2162,6 +2295,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!submitAppModal || !appPublishForm) return;
         submitAppModal.style.display = "none";
         appPublishForm.reset();
+        window.clearImportedMediaPreview?.();
+        clearPublishSubmitStatus();
         delete appPublishForm.dataset.editingAppId;
         document.getElementById("submitModalTitle").textContent = "Submit Software to Appex";
         appPublishForm.querySelector('button[type="submit"]').textContent = "Submit to Queue";
@@ -2181,15 +2316,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const newCategory = document.getElementById("formAppNewCategory")?.value.trim();
         const tagline = document.getElementById("formAppShortDesc").value;
         const version = document.getElementById("formAppVersion").value;
-        const size = document.getElementById("formAppSize").value || "2.5 MB";
+        const size = document.getElementById("formAppSize").value.trim();
         const license = document.getElementById("formAppLicense").value || "MIT";
         const primaryLanguage = document.getElementById("formAppLanguage")?.value.trim() || "";
         const desc = document.getElementById("formAppDesc").value;
-        const install = document.getElementById("formAppInstall").value || `npm install -g @${name.toLowerCase()}/cli`;
+        const install = document.getElementById("formAppInstall").value.trim();
         const downloadUrl = document.getElementById("formAppDownloadUrl")?.value.trim() || "";
         const github = document.getElementById("formAppGithub").value;
         const demo = document.getElementById("formAppDemo").value;
-        const iconTheme = document.getElementById("formAppIconUrl").value;
+        const platform = document.getElementById("formAppPlatform")?.value || "web";
+        const iconTheme = document.getElementById("formAppIconUrl")?.value || "blue";
         const tagsInput = document.getElementById("formAppTags").value;
         const screenshotInput = document.getElementById("formAppScreenshots");
         const iconInput = document.getElementById("formAppIcon");
@@ -2249,10 +2385,14 @@ document.addEventListener("DOMContentLoaded", () => {
             };
 
             const submitButton = appPublishForm.querySelector('button[type="submit"]');
+            const originalSubmitText = submitButton.textContent;
             submitButton.disabled = true;
+            submitButton.textContent = "Submitting...";
+            setPublishSubmitStatus("Creating app draft...");
             try {
                 const editingAppId = appPublishForm.dataset.editingAppId;
                 if (editingAppId) {
+                    setPublishSubmitStatus("Saving changes...");
                     const result = await request(`/api/developer/apps/${editingAppId}`, {
                         method: "PUT",
                         headers: { "Content-Type": "application/json" },
@@ -2260,7 +2400,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             name, tagline, description: desc,
                             ...(category === "__new__" ? { category_name: newCategory, category_slug: null } : { category_slug: category }),
                             repository_url: github || null, demo_url: demo || null,
-                            license: license || null, primary_language: primaryLanguage || null,
+                            license: license || null, primary_language: primaryLanguage || null, platform,
                             version: version || null, install_command: install || null,
                             size_bytes: parseFileSize(size), download_url: downloadUrl || null,
                             tags: tagsInput ? tagsInput.split(",").map(tag => tag.trim()).filter(Boolean) : []
@@ -2279,24 +2419,28 @@ document.addEventListener("DOMContentLoaded", () => {
                         name, tagline, description: desc,
                         ...(category === "__new__" ? { category_name: newCategory } : { category_slug: category }),
                         repository_url: github || null, demo_url: demo || null,
-                        license: license || null, primary_language: primaryLanguage || null,
+                        license: license || null, primary_language: primaryLanguage || null, platform,
                         tags: tagsInput ? tagsInput.split(",").map(tag => tag.trim()).filter(Boolean) : []
                     })
                 });
 
                 if (iconInput?.files[0]) {
+                    setPublishSubmitStatus("Uploading app icon...");
                     const iconData = new FormData();
                     iconData.append("icon", iconInput.files[0]);
                     await request(`/api/developer/apps/${createdApp.id}/icon`, { method: "POST", body: iconData });
                 }
 
+                setPublishSubmitStatus("Creating release information...");
                 await request(`/api/developer/apps/${createdApp.id}/releases`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ version, install_command: install || null, size_bytes: parseFileSize(size), download_url: downloadUrl || null })
                 });
 
-                for (const [index, image] of Array.from(screenshotInput?.files || []).entries()) {
+                const images = Array.from(screenshotInput?.files || []);
+                for (const [index, image] of images.entries()) {
+                    setPublishSubmitStatus(`Uploading image ${index + 1} of ${images.length}...`);
                     const formData = new FormData();
                     formData.append("image", image);
                     formData.append("sort_order", index);
@@ -2304,14 +2448,17 @@ document.addEventListener("DOMContentLoaded", () => {
                     await request(`/api/developer/apps/${createdApp.id}/screenshots`, { method: "POST", body: formData });
                 }
 
+                setPublishSubmitStatus("Submitting to admin review...");
                 await request(`/api/developer/apps/${createdApp.id}/submit`, { method: "POST" });
-                showToast(`"${name}" and ${screenshotInput?.files.length || 0} screenshot(s) submitted successfully.`, "success");
+                showToast(`"${name}" and ${screenshotInput?.files.length || 0} image(s) submitted successfully.`, "success");
                 closeModal();
                 window.setTimeout(() => window.location.reload(), 700);
             } catch (error) {
                 showToast(error.message, "danger");
+                setPublishSubmitStatus(error.message);
             } finally {
                 submitButton.disabled = false;
+                submitButton.textContent = originalSubmitText;
             }
             return;
         }
@@ -2614,7 +2761,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const password = document.getElementById("userLoginPassword").value;
 
         try {
-            const response = await fetch("/user/login", {
+            const response = await fetch("/login", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -2650,7 +2797,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const password_confirmation = document.getElementById("userRegisterPasswordConfirmation").value;
 
         try {
-            const response = await fetch("/user/register", {
+            const response = await fetch("/register", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -2841,4 +2988,113 @@ document.addEventListener("DOMContentLoaded", () => {
             window.closeManageAppModal();
         }
     });
+    // App Deletion Handlers
+    window.openDeleteAppModal = function(app) {
+        document.getElementById("deleteAppId").value = app.databaseId || app.id;
+        document.getElementById("deleteAppName").textContent = app.name;
+        document.getElementById("deleteAppReason").value = "";
+        
+        if (app.status === "approved") {
+            document.getElementById("deleteAppReasonContainer").style.display = "block";
+            document.getElementById("deleteAppWarning").textContent = "Deleting an approved app requires admin review.";
+        } else {
+            document.getElementById("deleteAppReasonContainer").style.display = "none";
+            document.getElementById("deleteAppWarning").textContent = "This will immediately delete the app.";
+        }
+        
+        document.getElementById("deleteAppModalOverlay").style.display = "flex";
+    };
+
+    document.getElementById("closeDeleteAppModalBtn")?.addEventListener("click", () => {
+        document.getElementById("deleteAppModalOverlay").style.display = "none";
+    });
+    document.getElementById("cancelDeleteAppBtn")?.addEventListener("click", () => {
+        document.getElementById("deleteAppModalOverlay").style.display = "none";
+    });
+
+    document.getElementById("confirmDeleteAppBtn")?.addEventListener("click", async () => {
+        const appId = document.getElementById("deleteAppId").value;
+        const reason = document.getElementById("deleteAppReason").value;
+        const app = state.apps.find(a => String(a.databaseId || a.id) === String(appId));
+        
+        if (app?.status === "approved" && !reason.trim()) {
+            showToast("Please provide a reason for deletion.", "danger");
+            return;
+        }
+
+        try {
+            const btn = document.getElementById("confirmDeleteAppBtn");
+            const originalText = btn.textContent;
+            btn.textContent = "Deleting...";
+            btn.disabled = true;
+
+            const deleteApp = csrfToken => fetch(`/api/developer/apps/${encodeURIComponent(appId)}`, {
+                method: "DELETE",
+                credentials: "same-origin",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-CSRF-TOKEN": csrfToken
+                },
+                body: JSON.stringify({ reason })
+            });
+
+            let csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+            let response = await deleteApp(csrfToken);
+
+            // The dashboard can remain open past a session/token rotation. Refresh once on 419.
+            if (response.status === 419) {
+                const tokenResponse = await fetch('/csrf-token', {
+                    credentials: "same-origin",
+                    headers: { "Accept": "application/json" }
+                });
+                const tokenData = await tokenResponse.json().catch(() => ({}));
+                if (tokenResponse.ok && tokenData.token) {
+                    csrfToken = tokenData.token;
+                    document.querySelector('meta[name="csrf-token"]')?.setAttribute("content", csrfToken);
+                    response = await deleteApp(csrfToken);
+                }
+            }
+
+            const data = await response.json().catch(() => ({}));
+            if (response.status === 404) {
+                await loadDeveloperApps();
+                throw new Error("This app is already deleted or no longer belongs to your developer account.");
+            }
+            if (!response.ok) throw new Error(data.message || "Failed to delete app.");
+
+            showToast(data.message, "success");
+            document.getElementById("deleteAppModalOverlay").style.display = "none";
+            await loadDeveloperApps();
+        } catch (error) {
+            showToast(error.message, "danger");
+        } finally {
+            const btn = document.getElementById("confirmDeleteAppBtn");
+            btn.textContent = "Delete App";
+            btn.disabled = false;
+        }
+    });
+
+    window.handleAdminDeletionReview = async function(appId, action) {
+        if (!window.confirm(`Are you sure you want to ${action} this deletion request?`)) return;
+
+        try {
+            const response = await fetch(`/api/admin/apps/${appId}/${action}-deletion`, {
+                method: "POST",
+                headers: {
+                    "Accept": "application/json",
+                    "Authorization": `Bearer ${state.token}`,
+                    "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.content || ""
+                }
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || `Failed to ${action} deletion.`);
+
+            showToast(data.message, "success");
+            await loadAdminPendingApps();
+        } catch (error) {
+            showToast(error.message, "danger");
+        }
+    };
 });
