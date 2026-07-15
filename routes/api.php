@@ -24,6 +24,7 @@ Route::middleware(['web', 'auth'])->prefix('developer')->name('api.developer.')-
     Route::put('/apps/{app}/screenshots/reorder', [DeveloperAppController::class, 'reorderScreenshots'])->name('apps.screenshots.reorder');
     Route::post('/apps/{app}/icon', [DeveloperAppController::class, 'storeIcon'])->name('apps.icon.store');
     Route::put('/apps/{app}/bugs/{bug}/status', [DeveloperAppController::class, 'updateBugStatus'])->name('apps.bugs.status');
+    Route::delete('/apps/{app}', [DeveloperAppController::class, 'destroy'])->name('apps.destroy');
 });
 
 Route::middleware(['web', 'auth'])->prefix('admin')->name('api.admin.')->group(function () {
@@ -37,6 +38,8 @@ Route::middleware(['web', 'auth'])->prefix('admin')->name('api.admin.')->group(f
     Route::post('/apps/{app}/approve', [AdminAppController::class, 'approve'])->name('apps.approve');
     Route::post('/apps/{app}/reject', [AdminAppController::class, 'reject'])->name('apps.reject');
     Route::post('/apps/{app}/feature', [AdminAppController::class, 'feature'])->name('apps.feature');
+    Route::post('/apps/{app}/approve-deletion', [AdminAppController::class, 'approveDeletion'])->name('apps.approve-deletion');
+    Route::post('/apps/{app}/reject-deletion', [AdminAppController::class, 'rejectDeletion'])->name('apps.reject-deletion');
     Route::delete('/apps/{app}', [AdminAppController::class, 'destroy'])->name('apps.destroy');
 });
 
