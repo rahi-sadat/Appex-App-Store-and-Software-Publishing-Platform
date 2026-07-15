@@ -16,7 +16,11 @@ class MarketplacePageController extends Controller
 
     public function discover(): View
     {
-        return view('pages.discover', ['marketplaceApps' => $this->apps()]);
+        $categories = \App\Models\Category::where('is_active', true)->orderBy('sort_order')->get();
+        return view('pages.discover', [
+            'marketplaceApps' => $this->apps(),
+            'categories' => $categories
+        ]);
     }
 
     private function apps()
