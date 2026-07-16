@@ -6,8 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Appex - Home</title>
     @include('components.theme-loader')
-    <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
-    <link rel="stylesheet" href="{{ asset('assets/css/pages/home.css') }}">
+    @vite(['resources/css/app.css', 'resources/css/pages/home.css', 'resources/js/core.js', 'resources/js/marketplace.js'])
 </head>
 <body
     data-page="today"
@@ -91,6 +90,8 @@
                     </button>
                     @endguest
                 </nav>
+
+                @include('components.header-user-actions')
 
                 <button class="theme-toggle-btn" id="themeToggle" type="button" aria-label="Switch theme color mode">
                     <svg viewBox="0 0 24 24">
@@ -197,65 +198,7 @@
             </div>
         </main>
 
-<footer class="site-footer">
-            <div class="footer-grid">
-                <div class="footer-col">
-                    <h3>Browse Store</h3>
-                    <ul>
-                        <li><a href="{{ route('home') }}" class="footer-tab-link">Marketplace Home</a></li>
-                        <li><a href="{{ route('about') }}" class="footer-tab-link">About Appex</a></li>
-                        <li><a href="{{ route('discover') }}" class="footer-tab-link">Explore Software</a></li>
-                        <li><a href="{{ route('discover') }}?category=Web%20App" class="footer-tab-link">Web Applications</a></li>
-                        <li><a href="{{ route('discover') }}?category=Laravel%20Package" class="footer-tab-link">Laravel Packages</a></li>
-                        <li><a href="{{ route('discover') }}?category=Script%20%26%20Tool" class="footer-tab-link">Scripts & Tools</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h3>Developer Console</h3>
-                    <ul>
-                        @if(auth()->guest() || auth()->user()->role === 'developer')
-                        <li><a href="{{ auth()->check() ? route('developer') : route('developer.login') }}" class="footer-tab-link">{{ auth()->check() ? 'Developer Console' : 'Publish App' }}</a></li>
-                        @endif
-                        <li><a href="{{ route('api.docs') }}" class="footer-tab-link">REST API Reference</a></li>
-                        <li><a href="#">Publishing Guidelines</a></li>
-                        <li><a href="#">Security & Sandbox policies</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h3>Platform & Moderation</h3>
-                    <ul>
-                        @if(auth()->check() && auth()->user()->role === 'admin')
-                        <li><a href="{{ route('admin') }}" class="footer-tab-link">Admin Dashboard</a></li>
-                        @endif
-                        <li><a href="#">Verification Queue</a></li>
-                        <li><a href="#">Report Abuse & Spam</a></li>
-                        <li><a href="#">Terms of Use</a></li>
-                        <li><a href="#">Privacy Agreement</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h3>Appex Corporation</h3>
-                    <ul>
-                        <li><a href="{{ route('about') }}" class="footer-tab-link">About Appex</a></li>
-                        <li><a href="#">Company Careers</a></li>
-                        <li><a href="#">Corporate Press</a></li>
-                        <li><a href="#">Security Bulletins</a></li>
-                        <li><a href="#">Contact Support</a></li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="footer-bottom">
-                <span class="copyright">&copy; 2026 Appex Marketplace Corporation. All rights reserved.</span>
-                <div class="footer-links">
-                    <a href="#">English (United States)</a>
-                    <a href="#">Privacy & Cookies</a>
-                    <a href="#">Terms of Sale</a>
-                    <a href="#">Trademarks</a>
-                    <a href="#">Safety & Eco</a>
-                </div>
-            </div>
-        </footer>
+@include('components.site-footer')
     </div>
 
 <!-- App Details Drawer Overlay -->
@@ -282,9 +225,12 @@
                     <div class="app-detail-badge-row" id="detailAppTags">
                         <!-- Tags injected by JS -->
                     </div>
-                    <div class="app-detail-get">
+                    <div class="app-detail-get" style="display: flex; gap: 8px; align-items: center;">
                         <button class="btn-get" id="detailGetBtn" type="button">GET</button>
-                        <span class="downloads-stat" id="detailDownloadsCount">0 downloads</span>
+                        @auth
+                            <button class="btn-secondary" id="detailWishlistBtn" type="button" style="border: 1px solid var(--border-color); background: var(--bg-card); padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; color: var(--text-primary);">Save</button>
+                        @endauth
+                        <span class="downloads-stat" id="detailDownloadsCount" style="margin-left: 8px;">0 downloads</span>
                     </div>
                 </div>
             </div>
@@ -312,9 +258,9 @@
                 </div>
             </div>
 
-            <!-- Image Screenshots Gallery -->
+            <!-- App Images Gallery -->
             <div class="detail-section">
-                <h3 class="detail-section-title">Screenshots</h3>
+                <h3 class="detail-section-title">Images</h3>
                 <div class="screenshots-gallery" id="detailScreenshotsContainer">
                     <!-- Images injected by JS -->
                 </div>
@@ -538,6 +484,6 @@
     @include('components.user-auth-modal')
 
     <script>window.__marketplaceApps = @json($marketplaceApps);</script>
-    <script src="{{ asset('assets/js/login.js') }}"></script>
+
 </body>
 </html>
