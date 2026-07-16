@@ -50,6 +50,11 @@
     </div>
 
     @auth
+        <div style="padding: 10px 16px;">
+            <a href="{{ route('user.dashboard') }}#downloads" style="display: block; background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-primary); text-align: center; padding: 8px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 500;">
+                My Dashboard
+            </a>
+        </div>
         <form method="post" action="{{ route('logout') }}" class="logout-form">
             @csrf
             <button type="submit" class="logout-button">
