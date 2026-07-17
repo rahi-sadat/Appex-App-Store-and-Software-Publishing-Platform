@@ -1,0 +1,49 @@
+body[data-page="user-dashboard"] .discover-controls {
+    justify-content: flex-start;
+    margin-bottom: 6px;
+}
+
+body[data-page="user-dashboard"] .category-pills {
+    padding: 4px 0;
+}
+
+body[data-page="user-dashboard"] .category-pill {
+    appearance: none;
+}
+
+body[data-page="user-dashboard"] .app-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+body[data-page="user-dashboard"] .app-card {
+    min-height: 96px;
+    cursor: default;
+}
+
+body[data-page="user-dashboard"] .app-card-icon {
+    width: 64px;
+    height: 64px;
+    flex: 0 0 64px;
+}
+
+body[data-page="user-dashboard"] .app-card-title {
+    font-size: 15px;
+}
+
+body[data-page="user-dashboard"] .app-card-action {
+    flex-shrink: 0;
+}
+
+body[data-page="user-dashboard"] .notifications-list > div {
+    box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 700px) {
+    body[data-page="user-dashboard"] .app-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body[data-page="user-dashboard"] .app-card {
+        align-items: flex-start;
+    }
+}

@@ -6,8 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Appex - Admin Moderation</title>
     @include('components.theme-loader')
-    <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
-    <link rel="stylesheet" href="{{ asset('assets/css/pages/admin.css') }}">
+    @vite(['resources/css/app.css', 'resources/css/pages/admin.css', 'resources/js/core.js', 'resources/js/marketplace.js', 'resources/js/developer.js', 'resources/js/admin.js'])
 </head>
 <body
     data-page="admin"
@@ -78,6 +77,8 @@
                     @endguest
                 </nav>
 
+                @include('components.header-user-actions')
+
                 <button class="theme-toggle-btn" id="themeToggle" type="button" aria-label="Switch theme color mode">
                     <svg viewBox="0 0 24 24">
                         <circle cx="12" cy="12" r="5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -132,6 +133,30 @@
                         </div>
                     </div>
 
+                    <!-- Deletion Requests Panel -->
+                    <div class="card-panel" style="margin-bottom: 24px;" id="adminDeletionRequestsPanel">
+                        <div class="panel-title-row">
+                            <h2 class="panel-title">Deletion Requests</h2>
+                            <span class="badge" style="background-color: var(--danger); color: white;" id="adminDeletionCount">0 Pending</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>App</th>
+                                        <th>Developer</th>
+                                        <th>Reason for Deletion</th>
+                                        <th>Requested Date</th>
+                                        <th>Action Required</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="adminDeletionTableBody">
+                                    <!-- Injected by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <div class="card-panel" style="margin-bottom:24px;">
                         <div class="panel-title-row"><h2 class="panel-title">Approved Apps</h2><span class="badge" id="adminAppsCount">0 Approved</span></div>
                         <div class="table-responsive">
@@ -168,60 +193,7 @@
             </div>
         </main>
 
-<footer class="site-footer">
-            <div class="footer-grid">
-                <div class="footer-col">
-                    <h3>Browse Store</h3>
-                    <ul>
-                        <li><a href="{{ route('home') }}" class="footer-tab-link">Marketplace Home</a></li>
-                        <li><a href="{{ route('about') }}" class="footer-tab-link">About Appex</a></li>
-                        <li><a href="{{ route('discover') }}" class="footer-tab-link">Explore Software</a></li>
-                        <li><a href="{{ route('discover') }}?category=Web%20App" class="footer-tab-link">Web Applications</a></li>
-                        <li><a href="{{ route('discover') }}?category=Laravel%20Package" class="footer-tab-link">Laravel Packages</a></li>
-                        <li><a href="{{ route('discover') }}?category=Script%20%26%20Tool" class="footer-tab-link">Scripts & Tools</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h3>Developer Console</h3>
-                    <ul>
-                        <li><a href="{{ route('api.docs') }}" class="footer-tab-link">REST API Reference</a></li>
-                        <li><a href="#">Publishing Guidelines</a></li>
-                        <li><a href="#">Security & Sandbox policies</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h3>Platform & Moderation</h3>
-                    <ul>
-                        <li><a href="{{ route('admin') }}" class="footer-tab-link">Admin Dashboard</a></li>
-                        <li><a href="#">Verification Queue</a></li>
-                        <li><a href="#">Report Abuse & Spam</a></li>
-                        <li><a href="#">Terms of Use</a></li>
-                        <li><a href="#">Privacy Agreement</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h3>Appex Corporation</h3>
-                    <ul>
-                        <li><a href="{{ route('about') }}" class="footer-tab-link">About Appex</a></li>
-                        <li><a href="#">Company Careers</a></li>
-                        <li><a href="#">Corporate Press</a></li>
-                        <li><a href="#">Security Bulletins</a></li>
-                        <li><a href="#">Contact Support</a></li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="footer-bottom">
-                <span class="copyright">&copy; 2026 Appex Marketplace Corporation. All rights reserved.</span>
-                <div class="footer-links">
-                    <a href="#">English (United States)</a>
-                    <a href="#">Privacy & Cookies</a>
-                    <a href="#">Terms of Sale</a>
-                    <a href="#">Trademarks</a>
-                    <a href="#">Safety & Eco</a>
-                </div>
-            </div>
-        </footer>
+@include('components.site-footer')
     </div>
 
 <!-- App Details Drawer Overlay -->
@@ -248,9 +220,12 @@
                     <div class="app-detail-badge-row" id="detailAppTags">
                         <!-- Tags injected by JS -->
                     </div>
-                    <div class="app-detail-get">
+                    <div class="app-detail-get" style="display: flex; gap: 8px; align-items: center;">
                         <button class="btn-get" id="detailGetBtn" type="button">GET</button>
-                        <span class="downloads-stat" id="detailDownloadsCount">0 downloads</span>
+                        @auth
+                            <button class="btn-secondary" id="detailWishlistBtn" type="button" style="border: 1px solid var(--border-color); background: var(--bg-card); padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; color: var(--text-primary);">Save</button>
+                        @endauth
+                        <span class="downloads-stat" id="detailDownloadsCount" style="margin-left: 8px;">0 downloads</span>
                     </div>
                 </div>
             </div>
@@ -278,9 +253,9 @@
                 </div>
             </div>
 
-            <!-- Image Screenshots Gallery -->
+            <!-- App Images Gallery -->
             <div class="detail-section">
-                <h3 class="detail-section-title">Screenshots</h3>
+                <h3 class="detail-section-title">Images</h3>
                 <div class="screenshots-gallery" id="detailScreenshotsContainer">
                     <!-- Images injected by JS -->
                 </div>
@@ -447,6 +422,16 @@
                         <input type="text" id="formAppShortDesc" class="form-input" placeholder="A single-sentence description of the tool" required>
                     </div>
                     <div class="form-group">
+                        <label for="formAppPlatform">Platform *</label>
+                        <select id="formAppPlatform" class="form-select" required>
+                            <option value="web" selected>Web</option>
+                            <option value="desktop">Desktop (Windows/Mac/Linux)</option>
+                            <option value="ios">iOS</option>
+                            <option value="mac">macOS</option>
+                            <option value="android">Android</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label for="formAppVersion">Initial Version *</label>
                         <input type="text" id="formAppVersion" class="form-input" placeholder="e.g. 1.0.0" value="1.0.0" required>
                     </div>
@@ -520,8 +505,11 @@
                     <div class="form-group full-width"><label for="adminEditInstall">Installation Guide / Command</label><input class="form-input" id="adminEditInstall" maxlength="255" placeholder="composer require vendor/package"></div>
                     <div class="form-group full-width"><label for="adminEditDownloadUrl">Direct download URL</label><input class="form-input" id="adminEditDownloadUrl" type="url" placeholder="https://example.com/releases/app.zip"><small>Use a direct file URL, not a general download webpage.</small></div>
                     <div class="form-group full-width"><label for="adminEditTags">Tags (comma separated)</label><input class="form-input" id="adminEditTags"></div>
-                    <div class="form-group full-width"><label>Submitted screenshots</label><small id="adminScreenshotHint" style="display:block;color:var(--text-secondary);margin-bottom:8px;">Drag screenshots to change their order. The first image is the cover.</small><div id="adminReviewScreenshots" style="display:flex;gap:10px;overflow-x:auto;padding:3px;"></div></div>
-                    <div class="form-group full-width"><label for="adminRejectReason">Rejection reason</label><textarea class="form-textarea" id="adminRejectReason" maxlength="1000" placeholder="Required when rejecting. Explain what the developer needs to fix."></textarea></div>
+                    <div class="form-group full-width"><label>Submitted images</label><small id="adminScreenshotHint" style="display:block;color:var(--text-secondary);margin-bottom:8px;">Drag images to change their order. The first image is the cover.</small><div id="adminReviewScreenshots" style="display:flex;gap:10px;overflow-x:auto;padding:3px;"></div></div>
+                    <div class="form-group full-width" style="display: block; margin-top: 20px;">
+                        <label for="adminRejectReason" style="display: block; margin-bottom: 8px; font-weight: 600;">Rejection reason</label>
+                        <textarea class="form-textarea" id="adminRejectReason" maxlength="1000" rows="4" placeholder="Required when rejecting. Explain what the developer needs to fix." style="width: 100%; min-height: 100px;"></textarea>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="submit" class="btn-secondary">Save changes</button>
@@ -538,6 +526,6 @@
     @include('components.user-auth-modal')
 
     <script>window.__adminPendingApps = @json($pendingApps);</script>
-    <script src="{{ asset('assets/js/login.js') }}"></script>
+
 </body>
 </html>
